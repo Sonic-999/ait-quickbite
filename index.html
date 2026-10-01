@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b21a8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M18 8h1a4 4 0 0 1 0 8h-1'/><path d='M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z'/><line x1='6' y1='1' x2='6' y2='4'/><line x1='10' y1='1' x2='10' y2='4'/><line x1='14' y1='1' x2='14' y2='4'/></svg>" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+    <title>AIT QuickBite - Skip the Queue at AIT Campus</title>
+    <meta name="description" content="AIT QuickBite: Pre-order food and drinks online across Army Institute of Technology (AIT) campus cafeterias and shops. Skip the lunch queue and pick up right when ready." />
+    
+    <!-- PWA Primary Manifest & Theme Configuration -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#6b21a8" />
+    <meta name="application-name" content="QuickBite" />
+    <meta name="mobile-web-app-capable" content="yes" />
+
+    <!-- Apple iOS PWA Capabilities -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="QuickBite" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192x192.png" />
+    <link rel="apple-touch-icon" sizes="512x512" href="/icons/icon-512x512.png" />
+
+    <!-- Modern Clean Typography: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Dynamic QR Code Library (qrcode.js CDN) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  </head>
+  <body class="bg-[#ffffff] text-[#1f2937] antialiased selection:bg-purple-100 selection:text-[#6b21a8] min-h-screen">
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

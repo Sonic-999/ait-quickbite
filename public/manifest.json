@@ -1,0 +1,88 @@
+{
+  "id": "/",
+  "name": "AIT QuickBite - Campus Food & Pre-Order",
+  "short_name": "QuickBite",
+  "description": "Pre-order food and drinks across Army Institute of Technology (AIT) campus cafeterias. Skip the line and get real-time kitchen ETA with instant counter pickup.",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#6b21a8",
+  "background_color": "#ffffff",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["food", "shopping", "lifestyle", "utilities"],
+  "icons": [
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-192x192-maskable.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512x512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Juice Center Menu",
+      "short_name": "Juices",
+      "description": "Pre-order freshly squeezed juices and fruit shakes",
+      "url": "/?shop=JuiceCenter",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Main Canteen Specials",
+      "short_name": "Canteen",
+      "description": "Browse today's hot student thalis and specials",
+      "url": "/?shop=MainCanteen",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Live Order Status",
+      "short_name": "Track",
+      "description": "Check real-time counter pickup token and kitchen status",
+      "url": "/live-status",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshots/mobile-preview.png",
+      "sizes": "540x960",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "QuickBite Mobile Food Ordering Experience"
+    },
+    {
+      "src": "/screenshots/desktop-preview.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "AIT QuickBite Campus Ordering Portal"
+    }
+  ],
+  "related_applications": [],
+  "prefer_related_applications": false
+}

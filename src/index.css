@@ -1,0 +1,243 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --color-primary: #6b21a8;
+    --color-primary-hover: #581c87;
+    --color-primary-light: #f3e8ff;
+    --color-text-main: #1f2937;
+    --color-text-muted: #4b5563;
+    --color-border: #e5e7eb;
+    --bg-white: #ffffff;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    background-color: #ffffff;
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    background-color: #ffffff;
+    color: #1f2937;
+    letter-spacing: -0.011em;
+    min-height: 100vh;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    color: #111827;
+    letter-spacing: -0.025em;
+  }
+}
+
+/* Clean, standard light-themed scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #ffffff;
+}
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+/* Subtle focus ring for accessibility */
+button:focus-visible, a:focus-visible, input:focus-visible {
+  outline: 2px solid #6b21a8;
+  outline-offset: 2px;
+}
+
+/* Hide scrollbar for clean horizontal pill navigation */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* ========================================================================== */
+/* SKELETON SCREEN SHIMMER ANIMATION (SWIGGY / BLINKIT STYLE)                */
+/* Linear gradient animation creating a smooth, pulsing shimmer effect       */
+/* ========================================================================== */
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.shimmer-skeleton {
+  background: linear-gradient(
+    90deg,
+    #f3f4f6 0%,
+    #e5e7eb 25%,
+    #f9fafb 50%,
+    #e5e7eb 75%,
+    #f3f4f6 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.6s ease-in-out infinite;
+}
+
+.shimmer-skeleton-darker {
+  background: linear-gradient(
+    90deg,
+    #e5e7eb 0%,
+    #d1d5db 25%,
+    #f3f4f6 50%,
+    #d1d5db 75%,
+    #e5e7eb 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.6s ease-in-out infinite;
+}
+
+.shimmer-skeleton-subtle {
+  background: linear-gradient(
+    90deg,
+    #f9fafb 0%,
+    #f3f4f6 25%,
+    #ffffff 50%,
+    #f3f4f6 75%,
+    #f9fafb 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.6s ease-in-out infinite;
+}
+
+/* ========================================================================== */
+/* MORPHING ADD BUTTON MICRO-INTERACTION (SWIGGY / BLINKIT STYLE)            */
+/* Smoothly expands horizontally from ADD into '- 1 +' quantity selector      */
+/* ========================================================================== */
+
+.morphing-add-btn {
+  transition: all 0.3s ease;
+  will-change: width, transform, box-shadow;
+}
+
+.morphing-add-btn:active {
+  transform: scale(0.97);
+}
+
+/* ========================================================================== */
+/* PARABOLIC FLYING CART & STICKY BANNER PULSE ANIMATION                     */
+/* Smooth parabolic arc flight and lively scale-up pulse when item lands      */
+/* ========================================================================== */
+
+@keyframes cart-bounce-pulse {
+  0% {
+    transform: scale(1);
+  }
+  30% {
+    transform: scale(1.09);
+    box-shadow: 0 0 28px rgba(107, 33, 168, 0.45), 0 20px 25px -5px rgba(0, 0, 0, 0.18);
+  }
+  60% {
+    transform: scale(0.96);
+  }
+  80% {
+    transform: scale(1.03);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.cart-pulse-active {
+  animation: cart-bounce-pulse 0.48s cubic-bezier(0.34, 1.56, 0.64, 1) forwards !important;
+  transform-origin: center center;
+}
+
+.flying-cart-item {
+  width: 30px !important;
+  height: 30px !important;
+  border-radius: 9999px !important;
+  object-fit: cover !important;
+  pointer-events: none !important;
+  user-select: none !important;
+  z-index: 99999 !important;
+}
+
+/* ========================================================================== */
+/* DYNAMIC LIVE TRACKING SVG ROAD, SCOOTER & COOKING PAN ANIMATIONS          */
+/* Physical vehicle translation, rolling wheels, steam wisps & road conveyor  */
+/* ========================================================================== */
+
+@keyframes dashed-flow {
+  from {
+    stroke-dashoffset: 24;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.animate-dashed-flow {
+  animation: dashed-flow 0.85s linear infinite;
+}
+
+@keyframes wheel-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-wheel-spin {
+  transform-origin: center center;
+  animation: wheel-spin 0.55s linear infinite;
+}
+
+@keyframes scooter-bob {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  30% {
+    transform: translateY(-2px) rotate(-0.5deg);
+  }
+  70% {
+    transform: translateY(1px) rotate(0.5deg);
+  }
+}
+
+.animate-scooter-bob {
+  animation: scooter-bob 0.8s ease-in-out infinite;
+}
+
+@keyframes steam-float {
+  0% {
+    transform: translateY(0px) scale(0.8);
+    opacity: 0;
+  }
+  40% {
+    transform: translateY(-5px) scale(1);
+    opacity: 0.8;
+  }
+  80% {
+    transform: translateY(-11px) scale(1.15);
+    opacity: 0.4;
+  }
+  100% {
+    transform: translateY(-16px) scale(1.3);
+    opacity: 0;
+  }
+}
+
+.animate-steam {
+  animation: steam-float 1.4s ease-out infinite;
+}
+
+
+
+
