@@ -26,7 +26,7 @@ import { socket } from '../socket';
 import { triggerHaptic } from '../utils/haptics';
 
 // Merchant UPI Configuration
-const MERCHANT_UPI_ID = 'your-canteen-upi@okbank';
+const MERCHANT_UPI_ID = 'kashishsangwan1105@okicici';
 const MERCHANT_NAME = 'AIT QuickBite';
 
 export default function CartCheckoutPanel({
