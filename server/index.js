@@ -1,10 +1,15 @@
 import express from 'express';
 import http from 'http';
 import cors from 'cors';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { seedDatabase } from './seed.js';
 import apiRouter from './routes/api.js';
 import { initSocketServer } from './socket.js';
 import { seedRecentTrendingOrders, startTrendingBackgroundWorker } from './services/trendingService.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const server = http.createServer(app);
@@ -43,25 +48,13 @@ app.use((req, res, next) => {
 // Mount Routes (supports both /api/* and root endpoints like /menu, /checkout, /vendor/orders)
 app.use(apiRouter);
 
-// Root fallback
-app.get('/', (req, res) => {
-  res.json({
-    name: 'AIT QuickBite Full-Stack API Server',
-    status: 'online',
-    endpoints: [
-      'GET /menu (or /api/menu)',
-      'POST /checkout (or /api/checkout)',
-      'GET /vendor/orders (or /api/vendor/orders)',
-      'POST /vendor/orders (or /api/vendor/orders)',
-      'GET /orders/:id (or /api/orders/:id)',
-      'GET /health (or /api/health)',
-    ],
-  });
-});
+// Serve static frontend assets from Vite build directory
+const distPath = path.join(__dirname, '../dist');
+app.use(express.static(distPath));
 
-// 404 handler for unknown routes
-app.use((req, res) => {
-  res.status(404).json({ success: false, error: `Route not found: ${req.method} ${req.url}` });
+// Catch-all route to serve the React frontend index.html for client-side routing
+app.get('*', (req, res) => {
+  res.sendFile(path.join(distPath, 'index.html'));
 });
 
 // Error handling middleware
