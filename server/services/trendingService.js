@@ -11,6 +11,17 @@ let lastTrendingHash = '';
  */
 export function seedRecentTrendingOrders() {
   try {
+    // Check if trending orders are already populated in the database
+    const existingCheck = db.prepare(`
+      SELECT COUNT(*) as count
+      FROM Orders
+      WHERE id LIKE 'ord-trend-%'
+    `).get();
+
+    if (existingCheck && existingCheck.count >= 36) {
+      return;
+    }
+
     const recentCheck = db.prepare(`
       SELECT COUNT(*) as count
       FROM Orders
@@ -26,7 +37,7 @@ export function seedRecentTrendingOrders() {
       `);
 
       const insertOrder = db.prepare(`
-        INSERT INTO Orders (
+        INSERT OR IGNORE INTO Orders (
           id, token, user_id, user_name, shop_name, status, pickup_time,
           due_time, estimated_time, total, utr, items, upi_string, created_at
         ) VALUES (

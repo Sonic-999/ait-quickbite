@@ -52,8 +52,8 @@ app.use(apiRouter);
 const distPath = path.join(__dirname, '../dist');
 app.use(express.static(distPath));
 
-// Catch-all route to serve the React frontend index.html for client-side routing
-app.get('*', (req, res) => {
+// Catch-all route to serve the React frontend index.html for client-side routing (Express 5 compatible)
+app.get('/{*splat}', (req, res) => {
   res.sendFile(path.join(distPath, 'index.html'));
 });
 
