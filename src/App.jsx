@@ -1,16 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import Navbar from './components/Navbar';
-import HeroSection from './components/HeroSection';
-import HowItWorks from './components/HowItWorks';
-import CampusShops from './components/CampusShops';
-import JuiceCenterMenu from './components/JuiceCenterMenu';
-import MyOrdersSection from './components/MyOrdersSection';
+import BottomNavigationBar from './components/BottomNavigationBar';
+import HomePage from './pages/HomePage';
+import CartPage from './pages/CartPage';
+import ProfilePage from './pages/ProfilePage';
+import SupportPage from './pages/SupportPage';
+import VendorDashboard from './components/VendorDashboard';
 import LiveOrderStatus from './components/LiveOrderStatus';
 import CartCheckoutPanel from './components/CartCheckoutPanel';
-import QRCodeGenerator from './components/QRCodeGenerator';
 import LoginModal from './components/LoginModal';
-import VendorDashboard from './components/VendorDashboard';
+import QRCodeGenerator from './components/QRCodeGenerator';
 import A2HSInstallPrompt from './components/A2HSInstallPrompt';
+import GroupInviteModal from './components/GroupInviteModal';
+import GroupJoinModal from './components/GroupJoinModal';
+import GroupSplitCheckout from './components/GroupSplitCheckout';
+import RewardsWidget from './components/RewardsWidget';
 import Footer from './components/Footer';
 import { CheckCircle2 } from 'lucide-react';
 import {
@@ -23,26 +28,15 @@ import {
   emitGroupDispatchOrder,
 } from './socket';
 import { fireCelebratoryConfetti } from './utils/confetti';
-import GroupInviteModal from './components/GroupInviteModal';
-import GroupJoinModal from './components/GroupJoinModal';
-import GroupSplitCheckout from './components/GroupSplitCheckout';
-import WalletAnalytics from './components/WalletAnalytics';
-import RewardsWidget from './components/RewardsWidget';
-import StickyBottomNav from './components/StickyBottomNav';
 
-export default function App() {
-  const [activeTab, setActiveTab] = useState('home');
-  const [currentView, setCurrentView] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const path = window.location.pathname;
-      const search = window.location.search;
-      if (path === '/wallet' || search.includes('view=wallet')) return 'wallet';
-      if (path === '/live-status' || search.includes('view=order-status')) return 'order-status';
-      if (path === '/vendor' || search.includes('view=vendor')) return 'vendor';
-      if (path === '/menu' || path === '/juice-menu' || search.includes('view=menu') || search.includes('view=juice-menu')) return 'juice-menu';
-    }
-    return 'main';
-  }); // 'main' | 'juice-menu' | 'order-status' | 'vendor' | 'wallet'
+/**
+ * Inner Application Component containing Router-Aware Navigation,
+ * Centralized State, WebSockets Synchronization, and Sticky Bottom Bar.
+ */
+function AppContent() {
+  const navigate = useNavigate();
+  const location = useLocation();
+
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [qrModalOpen, setQrModalOpen] = useState(false);
@@ -64,7 +58,7 @@ export default function App() {
   const [activeOrderForStatus, setActiveOrderForStatus] = useState(null);
 
   // Multiplayer Group Order state
-  const [currentUser, setCurrentUser] = useState(() => {
+  const [currentUser] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('ait_group_user');
       if (saved) {
@@ -88,15 +82,23 @@ export default function App() {
   const [pendingJoinSessionId, setPendingJoinSessionId] = useState(null);
   const [isGroupCheckoutOpen, setIsGroupCheckoutOpen] = useState(false);
 
+  // Cart items state
+  const [cartItems, setCartItems] = useState([]);
+
+  const showNotification = useCallback((msg) => {
+    setNotification(msg);
+    setTimeout(() => {
+      setNotification(null);
+    }, 3500);
+  }, []);
+
   // Multiplayer Group Cart Socket.IO Listeners
   useEffect(() => {
     const handleGroupStateSync = ({ session }) => {
-      console.log('[App Socket] group:state_sync:', session);
       if (session) setGroupSession(session);
     };
 
     const handleGroupUserJoined = ({ session, user }) => {
-      console.log('[App Socket] group:user_joined:', user);
       if (session) setGroupSession(session);
       if (user && user.id !== currentUser.id) {
         showNotification(`${user.avatar || '👥'} ${user.name} joined the Group Cart!`);
@@ -104,7 +106,6 @@ export default function App() {
     };
 
     const handleGroupCartUpdated = ({ session, item, delta, user }) => {
-      console.log('[App Socket] group:cart_updated:', item, delta, user);
       if (session) setGroupSession(session);
       if (user && user.id !== currentUser.id && item) {
         showNotification(
@@ -116,16 +117,14 @@ export default function App() {
     };
 
     const handleGroupPaymentReceived = ({ session, participant }) => {
-      console.log('[App Socket] group:payment_received:', participant);
       if (session) setGroupSession(session);
       if (participant) {
         playNotificationChime();
-        showNotification(`💰 ${participant.avatar || '✓'} ${participant.name} paid their share (₹${session?.splitBill?.perPersonAmount || ''})!`);
+        showNotification(`💰 ${participant.avatar || '✓'} ${participant.name} paid their share!`);
       }
     };
 
     const handleGroupOrderDispatched = ({ session, order }) => {
-      console.log('[App Socket] group:order_dispatched:', order);
       if (session) setGroupSession(session);
       if (order) {
         fireCelebratoryConfetti();
@@ -133,10 +132,7 @@ export default function App() {
         setActiveOrderForStatus(order);
         setIsGroupCheckoutOpen(false);
         showNotification(`🎉 Group Order #${order.token} dispatched to kitchen!`);
-        if (typeof window !== 'undefined' && window.history) {
-          window.history.pushState({ orderId: order.id }, '', '/live-status');
-        }
-        setCurrentView('order-status');
+        navigate('/live-status');
       }
     };
 
@@ -153,9 +149,9 @@ export default function App() {
       socket.off('group:payment_received', handleGroupPaymentReceived);
       socket.off('group:order_dispatched', handleGroupOrderDispatched);
     };
-  }, [currentUser.id]);
+  }, [currentUser.id, navigate, showNotification]);
 
-  // Initial order load + Socket.IO real-time synchronization (No HTTP polling!)
+  // Initial order load + Socket.IO real-time synchronization
   useEffect(() => {
     let isMounted = true;
     const fetchOrdersFromDb = async () => {
@@ -177,17 +173,14 @@ export default function App() {
 
     fetchOrdersFromDb();
 
-    // Real-time WebSockets event listeners
     const handleNewOrder = ({ order }) => {
       if (!order || !isMounted) return;
-      console.log('[App Socket] Real-time order:new received:', order);
       setOrders((prev) => [order, ...prev.filter((o) => o.id !== order.id)]);
       showNotification(`🔔 New Order #${order.token || order.id} queued!`);
     };
 
     const handleStatusUpdated = ({ orderId, status, order }) => {
       if (!isMounted) return;
-      console.log(`[App Socket] Real-time order:status_updated received: ${orderId} -> ${status}`);
       setOrders((prev) =>
         prev.map((o) => (o.id === orderId ? { ...o, ...(order || {}), status } : o))
       );
@@ -205,229 +198,32 @@ export default function App() {
       socket.off('order:new', handleNewOrder);
       socket.off('order:status_updated', handleStatusUpdated);
     };
-  }, []);
+  }, [showNotification]);
 
-  // Cart items start empty
-  const [cartItems, setCartItems] = useState([]);
+  // Handle URL query parameters (e.g., ?view=order-status or ?view=wallet)
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const viewParam = params.get('view');
+    const orderIdParam = params.get('orderId');
 
-  // Synchronize browser URL (/live-status, /vendor, /menu, /cart/session/:id) with view state
-  React.useEffect(() => {
-    const handleUrlRouting = () => {
-      if (typeof window !== 'undefined') {
-        const path = window.location.pathname;
-        const search = window.location.search;
-        const urlParams = new URLSearchParams(search);
-
-        // Check for group cart session URLs (/cart/session/:id or ?group=:id)
-        const groupMatch = path.match(/\/cart\/session\/([a-zA-Z0-9_-]+)/);
-        const sessionFromUrl = (groupMatch && groupMatch[1]) || urlParams.get('group');
-
-        if (sessionFromUrl) {
-          setCurrentView('juice-menu');
-          setPendingJoinSessionId(sessionFromUrl);
-
-          fetch(`/api/group-cart/${sessionFromUrl}`)
-            .then((r) => r.json())
-            .then((d) => {
-              if (d.success && d.session) {
-                setGroupSession(d.session);
-                const isAlreadyParticipant = d.session.participants.some(
-                  (p) => p.id === currentUser.id
-                );
-                if (!isAlreadyParticipant) {
-                  setIsJoinModalOpen(true);
-                } else {
-                  joinGroupRoom(sessionFromUrl, currentUser);
-                }
-              } else {
-                setIsJoinModalOpen(true);
-              }
-            })
-            .catch(() => {
-              setIsJoinModalOpen(true);
-            });
-          return;
-        }
-
-        if (path === '/wallet' || search.includes('view=wallet')) {
-          setCurrentView('wallet');
-          setActiveTab('wallet');
-        } else if (path === '/live-status') {
-          const qOrderId = urlParams.get('orderId') || (window.history.state && window.history.state.orderId);
-          if (qOrderId) {
-            fetch(`/api/orders/${qOrderId}`)
-              .then((r) => r.json())
-              .then((d) => {
-                if (d.success && d.order) setActiveOrderForStatus(d.order);
-              })
-              .catch(() => {});
-          }
-          setCurrentView('order-status');
-        } else if (path === '/vendor') {
-          setCurrentView('vendor');
-          setActiveTab('vendor');
-        } else if (path === '/menu' || path === '/juice-menu' || search.includes('view=menu')) {
-          setCurrentView('juice-menu');
-        } else {
-          setCurrentView('main');
-        }
+    if (viewParam === 'order-status') {
+      if (orderIdParam) {
+        fetch(`/api/orders/${orderIdParam}`)
+          .then((r) => r.json())
+          .then((d) => {
+            if (d.success && d.order) setActiveOrderForStatus(d.order);
+          })
+          .catch(() => {});
       }
-    };
-
-    handleUrlRouting();
-    window.addEventListener('popstate', handleUrlRouting);
-    return () => window.removeEventListener('popstate', handleUrlRouting);
-  }, [currentUser.id]);
-
-  const showNotification = (msg) => {
-    setNotification(msg);
-    setTimeout(() => {
-      setNotification(null);
-    }, 3500);
-  };
-
-  const handleBrowseShops = () => {
-    if (typeof window !== 'undefined' && (window.location.pathname === '/live-status' || window.location.pathname === '/vendor' || window.location.pathname === '/wallet')) {
-      window.history.pushState({}, '', '/');
+      navigate('/live-status', { replace: true });
+    } else if (viewParam === 'wallet') {
+      navigate('/profile', { replace: true });
+    } else if (viewParam === 'cart') {
+      navigate('/cart', { replace: true });
     }
-    setCurrentView('main');
-    setActiveTab('shops');
-    setTimeout(() => {
-      const shopsEl = document.getElementById('campus-shops');
-      if (shopsEl) shopsEl.scrollIntoView({ behavior: 'smooth' });
-    }, 50);
-  };
+  }, [location.search, navigate]);
 
-  const handleSelectTab = (tabId) => {
-    setActiveTab(tabId);
-    if (typeof window !== 'undefined') {
-      if (tabId === 'vendor') {
-        window.history.pushState({}, '', '/vendor');
-      } else if (tabId === 'wallet') {
-        window.history.pushState({}, '', '/wallet');
-      } else if (window.location.pathname === '/live-status' || window.location.pathname === '/vendor' || window.location.pathname === '/wallet') {
-        window.history.pushState({}, '', '/');
-      }
-    }
-
-    if (tabId === 'vendor') {
-      setCurrentView('vendor');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    } else if (tabId === 'wallet') {
-      setCurrentView('wallet');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    } else if (tabId === 'home') {
-      setCurrentView('main');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    } else if (tabId === 'shops') {
-      setCurrentView('main');
-      setTimeout(() => {
-        const shopsEl = document.getElementById('campus-shops');
-        if (shopsEl) shopsEl.scrollIntoView({ behavior: 'smooth' });
-      }, 50);
-    } else if (tabId === 'orders') {
-      setCurrentView('main');
-      setTimeout(() => {
-        const ordersEl = document.getElementById('orders-section');
-        if (ordersEl) ordersEl.scrollIntoView({ behavior: 'smooth' });
-      }, 50);
-    }
-  };
-
-  const handleUpdateOrderStatus = (orderId, newStatus) => {
-    setOrders((prev) =>
-      prev.map((ord) => {
-        if (ord.id === orderId) {
-          return {
-            ...ord,
-            status: newStatus,
-            estimatedTime:
-              newStatus === 'Ready for Pickup' ? 'Ready now for pickup!' : ord.estimatedTime,
-          };
-        }
-        return ord;
-      })
-    );
-
-    // Persist status change to SQLite database
-    try {
-      fetch('/api/vendor/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderId, status: newStatus }),
-      }).catch((e) => console.error('Status sync error:', e));
-    } catch (e) {
-      // non-blocking
-    }
-
-    const targetOrder = orders.find((o) => o.id === orderId);
-    const token = targetOrder ? targetOrder.token : '42';
-
-    if (newStatus === 'Ready for Pickup' || newStatus === 'Ready') {
-      showNotification(`Order #AIT-${token} marked as Ready! Student notified.`);
-    } else {
-      showNotification(`Order #AIT-${token} moved back to kitchen queue.`);
-    }
-  };
-
-  const handleAddNewSampleOrder = async () => {
-    const newToken = Math.floor(10 + Math.random() * 89).toString();
-    const randomUtr = Math.floor(100000000000 + Math.random() * 900000000000).toString();
-    const newOrder = {
-      id: `ord-${Date.now()}`,
-      token: newToken,
-      shopName: 'Juice Center',
-      location: 'Near Sports Complex & Gym',
-      status: 'Pending',
-      pickupTime: 'In 10 Minutes',
-      dueTime: '2:45 PM',
-      estimatedTime: 'In 15 mins (approx. 2:45 PM)',
-      total: 95,
-      utr: randomUtr,
-      items: [
-        { name: '2x Fresh Orange Juice', price: 80 },
-        { name: '1x Crispy Punjabi Samosa (2 pcs)', price: 15 },
-      ],
-    };
-
-    try {
-      const res = await fetch('/api/vendor/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'create', order: newOrder }),
-      });
-      const data = await res.json();
-      if (data.success && data.order) {
-        setOrders((prev) => [data.order, ...prev]);
-        showNotification(`New order incoming! #AIT-${newToken} (UTR: ${randomUtr})`);
-        return;
-      }
-    } catch (err) {
-      console.error('Failed to create sample order:', err);
-    }
-
-    setOrders((prev) => [newOrder, ...prev]);
-    showNotification(`New order incoming! #AIT-${newToken} (UTR: ${randomUtr})`);
-  };
-
-  const handleQuickOrder = (item, shop) => {
-    const newToken = Math.floor(10 + Math.random() * 89).toString();
-    const newOrder = {
-      id: `ord-${Date.now()}`,
-      token: newToken,
-      shopName: shop.name,
-      location: shop.location,
-      status: 'Order Placed &bull; Kitchen Preparing',
-      estimatedTime: `In ${shop.prepTime ? shop.prepTime.split(' ')[0] : '5'} mins`,
-      total: item.price,
-      items: [{ name: `1x ${item.name}`, price: item.price }],
-    };
-
-    setOrders((prev) => [newOrder, ...prev]);
-    setActiveOrderForStatus(newOrder);
-    showNotification(`Pre-ordered "${item.name}" from ${shop.name}! Token #${newToken}`);
-  };
-
+  // Cart operations
   const handleAddToCartFromMenu = ({ item, quantity, shop }) => {
     setCartItems((prev) => {
       const existing = prev.find((it) => it.id === item.id);
@@ -443,244 +239,64 @@ export default function App() {
           name: item.name,
           price: item.price,
           quantity,
-          shopName: shop.name,
-          location: shop.location,
+          shopName: shop.name || 'Juice Center',
+          location: shop.location || 'Near Sports Complex',
+          prepTimeMinutes: item.prepTimeMinutes || item.prep_time_minutes || 3,
         },
       ];
     });
+
+    if (groupSession) {
+      emitGroupCartUpdate(groupSession.id, {
+        item,
+        delta: quantity,
+        user: currentUser,
+      });
+    }
 
     showNotification(`Added ${quantity}x "${item.name}" to Cart!`);
   };
 
-  const handleUpdateCartQuantity = (itemId, delta) => {
-    setCartItems((prev) =>
-      prev
-        .map((it) => {
-          if (it.id === itemId) {
-            const newQty = it.quantity + delta;
-            return newQty > 0 ? { ...it, quantity: newQty } : null;
-          }
-          return it;
-        })
-        .filter(Boolean)
-    );
+  const handleUpdateCartQuantity = (itemId, newQty) => {
+    setCartItems((prev) => {
+      if (newQty <= 0) {
+        return prev.filter((it) => it.id !== itemId);
+      }
+      return prev.map((it) => (it.id === itemId ? { ...it, quantity: newQty } : it));
+    });
   };
 
   const handleRemoveCartItem = (itemId) => {
     setCartItems((prev) => prev.filter((it) => it.id !== itemId));
+    showNotification('Item removed from cart');
   };
 
-  // Group Cart Multiplayer Actions
-  const handleCreateGroupCart = async () => {
-    try {
-      const res = await fetch('/api/group-cart/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          hostName: currentUser.name,
-          avatar: currentUser.avatar,
-          color: currentUser.color,
-        }),
-      });
-      const data = await res.json();
-      if (data.success && data.session) {
-        const updatedUser = { ...currentUser, isHost: true };
-        setCurrentUser(updatedUser);
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('ait_group_user', JSON.stringify(updatedUser));
-          window.history.pushState({}, '', `/cart/session/${data.session.id}`);
-        }
-        setGroupSession(data.session);
-        joinGroupRoom(data.session.id, updatedUser);
-        setIsInviteModalOpen(true);
-        showNotification(`🎉 Group Cart #${data.session.id} created! Share link with friends.`);
-      } else {
-        showNotification(`Failed to create group cart: ${data.error || 'Server error'}`);
-      }
-    } catch (err) {
-      console.error('Error creating group cart:', err);
-      showNotification('Error creating group cart.');
-    }
+  const handleQuickOrder = (item, shop) => {
+    handleAddToCartFromMenu({ item, quantity: 1, shop });
+    navigate('/cart');
   };
 
-  const handleJoinGroup = async (userProfile) => {
-    const targetSessionId = pendingJoinSessionId || groupSession?.id;
-    if (!targetSessionId) return;
-
-    const finalUser = {
-      id: currentUser.id || 'user_' + Math.random().toString(36).substring(2, 9),
-      name: userProfile.name,
-      avatar: userProfile.avatar,
-      color: userProfile.color,
-      isHost: false,
-    };
-    setCurrentUser(finalUser);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('ait_group_user', JSON.stringify(finalUser));
-      window.history.pushState({}, '', `/cart/session/${targetSessionId}`);
-    }
-
-    try {
-      const res = await fetch(`/api/group-cart/${targetSessionId}/join`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user: finalUser }),
-      });
-      const data = await res.json();
-      if (data.success && data.session) {
-        setGroupSession(data.session);
-      }
-    } catch (e) {
-      console.warn('API join error, relying on socket:', e);
-    }
-
-    joinGroupRoom(targetSessionId, finalUser);
-    setIsJoinModalOpen(false);
-    setCurrentView('juice-menu');
-    showNotification(`👋 Welcome to the Group Cart, ${finalUser.name}!`);
-  };
-
-  const handleUpdateGroupCart = (item, delta) => {
-    if (!groupSession) return;
-    emitGroupCartUpdate(groupSession.id, {
-      item,
-      delta,
-      user: currentUser,
-    });
-  };
-
-  const handlePayShare = async (participantId, utr) => {
-    if (!groupSession) return;
-    emitGroupPayShare(groupSession.id, participantId, utr);
-    try {
-      await fetch(`/api/group-cart/${groupSession.id}/pay`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ participantId, utr }),
-      });
-    } catch (e) {
-      console.warn('REST pay share error:', e);
-    }
-  };
-
-  const handleDispatchGroupOrder = async ({ utr, pickupTime }) => {
-    if (!groupSession) return;
-    const studentSocketId = getSocketId();
-    try {
-      const res = await fetch(`/api/group-cart/${groupSession.id}/dispatch`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          studentSocketId,
-          utr: utr || '123456789012',
-          pickupTime: pickupTime || 'In 10 Minutes',
-        }),
-      });
-      const data = await res.json();
-      if (data.success && data.order) {
-        setOrders((prev) => [data.order, ...prev.filter((o) => o.id !== data.order.id)]);
-        setActiveOrderForStatus(data.order);
-        setGroupSession(data.session);
-        setIsGroupCheckoutOpen(false);
-        fireCelebratoryConfetti();
-        showNotification(`🎉 Group Order #${data.order.token} placed with kitchen!`);
-        if (typeof window !== 'undefined' && window.history) {
-          window.history.pushState({ orderId: data.order.id }, '', '/live-status');
-        }
-        setCurrentView('order-status');
-        return data.order;
-      } else {
-        throw new Error(data.error || 'Failed to dispatch order');
-      }
-    } catch (err) {
-      console.error('Dispatch error:', err);
-      throw err;
-    }
-  };
-
-  const handleLeaveGroupCart = () => {
-    setGroupSession(null);
-    setIsGroupCheckoutOpen(false);
-    if (typeof window !== 'undefined') {
-      window.history.pushState({}, '', '/menu');
-    }
-    showNotification('Left Group Cart session.');
-  };
-
-  const handleAddFreePromoItemToCart = (freeItem) => {
-    if (!freeItem) return;
+  const handleAddFreePromoItemToCart = (item) => {
+    if (!item) return;
     setCartItems((prev) => {
-      const existing = prev.find(
-        (it) => it.id === freeItem.id || it.name.toLowerCase() === freeItem.name.toLowerCase()
-      );
-      if (existing) {
-        return prev;
-      }
+      const exists = prev.find((it) => it.id === item.id);
+      if (exists) return prev;
       return [
         ...prev,
         {
-          id: freeItem.id,
-          name: freeItem.name,
-          price: freeItem.price,
+          id: item.id,
+          name: item.name,
+          price: item.price || 0,
           quantity: 1,
-          shopName: freeItem.shopName || 'Juice Center',
-          isFreeReward: true,
-          prepTimeMinutes: 3,
+          shopName: 'Juice Center',
+          isFreePromo: true,
         },
       ];
     });
-    showNotification(`🎁 Free ${freeItem.name} added to your cart!`);
+    showNotification(`🎁 Free "${item.name}" added to cart!`);
   };
 
-  const handleVoiceOrderSuccess = (matchedItemsList, toastMessage) => {
-    if (!Array.isArray(matchedItemsList) || matchedItemsList.length === 0) return;
-
-    setCartItems((prev) => {
-      let updated = [...prev];
-      matchedItemsList.forEach(({ item, quantity }) => {
-        const existingIndex = updated.findIndex(
-          (it) => it.id === item.id || it.name.toLowerCase() === item.name.toLowerCase()
-        );
-        if (existingIndex >= 0) {
-          updated[existingIndex] = {
-            ...updated[existingIndex],
-            quantity: updated[existingIndex].quantity + quantity,
-          };
-        } else {
-          updated.push({
-            id: item.id,
-            name: item.name,
-            price: item.price,
-            quantity,
-            shopName: item.shopName || 'Juice Center',
-            location: item.location || 'Near Sports Complex & Gym',
-            prepTimeMinutes: item.prepTimeMinutes || 3,
-            inStockQuantity: item.inStockQuantity || 20,
-          });
-        }
-      });
-      return updated;
-    });
-
-    // If currently in a Multiplayer Group Cart session, sync voice additions with all participants
-    if (groupSession) {
-      matchedItemsList.forEach(({ item, quantity }) => {
-        emitGroupCartUpdate(groupSession.id, {
-          item,
-          delta: quantity,
-          user: currentUser,
-        });
-      });
-    }
-
-    // Trigger cart pulse animation
-    const floatingBar = document.getElementById('floating-cart-banner-card');
-    if (floatingBar) {
-      floatingBar.classList.add('cart-pulse-active');
-      setTimeout(() => floatingBar.classList.remove('cart-pulse-active'), 700);
-    }
-  };
-
+  // Order Placement
   const handleConfirmOrder = async ({ items, total, pickupTime, utr, upiString, promoCode }) => {
     const sanitizedUtr = (utr || '').toString().trim() || '123456789012';
 
@@ -700,7 +316,7 @@ export default function App() {
           pickupTime: pickupTime || 'In 10 Minutes',
           utr: sanitizedUtr,
           shopName: items[0]?.shopName || 'Juice Center',
-          userName: 'Aarav Sharma',
+          userName: currentUser?.name || 'Aarav Sharma',
           upiString,
           promoCode: promoCode || activePromo?.code,
           studentSocketId: getSocketId(),
@@ -714,69 +330,101 @@ export default function App() {
         setActiveOrderForStatus(createdOrder);
         setCartItems([]);
         setIsCartOpen(false);
-
-        // Clear redeemed promo code and trigger loyalty widget refresh
         setActivePromo(null);
         setRewardsRefreshKey((k) => k + 1);
 
-        // Fire celebratory burst of confetti exactly when order is successfully logged in the database!
         fireCelebratoryConfetti();
 
-        // Trigger custom A2HS (Add to Home Screen) install prompt after successful order
         setA2hsOrderToken(createdOrder.token);
-        setTimeout(() => {
-          setShowA2hsPrompt(true);
-        }, 750);
+        setTimeout(() => setShowA2hsPrompt(true), 750);
 
-        // Redirect to '/live-status' page
-        if (typeof window !== 'undefined' && window.history) {
-          window.history.pushState({ orderId: createdOrder.id }, '', '/live-status');
-        }
-        setCurrentView('order-status');
+        navigate('/live-status');
         window.scrollTo({ top: 0, behavior: 'smooth' });
 
         if (data.rewards) {
-          showNotification(`Payment Verified! 🪙 +${data.rewards.earnedPoints} BiteCoins earned (${data.rewards.streakMessage})`);
+          showNotification(`Payment Verified! 🪙 +${data.rewards.earnedPoints} BiteCoins earned!`);
         } else {
-          showNotification(`Payment Verified! Order #AIT-${createdOrder.token} (UTR: ${createdOrder.utr})`);
+          showNotification(`Payment Verified! Order #AIT-${createdOrder.token} created!`);
         }
         return { success: true, order: createdOrder, rewards: data.rewards };
       } else {
-        // Concurrency or validation error returned from ACID backend (e.g. 'Item just sold out')
-        console.warn('[Checkout Transaction Failed]', data);
         const errorMsg = data.error || data.message || 'Failed to place order.';
-        const itemName = data.item || '';
-        showNotification(`⚠️ ${errorMsg}${itemName ? `: ${itemName}` : ''}`);
-        return {
-          success: false,
-          error: errorMsg,
-          message: data.message || errorMsg,
-          item: itemName,
-          itemId: data.itemId,
-          code: data.code,
-        };
+        showNotification(`⚠️ ${errorMsg}`);
+        return { success: false, error: errorMsg };
       }
     } catch (err) {
       console.error('[Checkout Error]', err);
-      showNotification(`⚠️ Connection error placing order: ${err.message}`);
+      showNotification(`⚠️ Error placing order: ${err.message}`);
       return { success: false, error: err.message };
     }
   };
 
-  const handleTrackSpecificOrder = (order) => {
-    setActiveOrderForStatus(order);
-    if (typeof window !== 'undefined' && window.history) {
-      window.history.pushState({ orderId: order.id }, '', '/live-status');
-    }
-    setCurrentView('order-status');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+  // Vendor status update handler
+  const handleUpdateOrderStatus = (orderId, newStatus) => {
+    setOrders((prev) =>
+      prev.map((ord) => (ord.id === orderId ? { ...ord, status: newStatus } : ord))
+    );
+    try {
+      fetch('/api/vendor/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId, status: newStatus }),
+      }).catch(() => {});
+    } catch (e) {}
+
+    const target = orders.find((o) => o.id === orderId);
+    showNotification(`Order #AIT-${target?.token || '42'} marked as ${newStatus}`);
   };
 
-  const handleOpenQrGenerator = (payload) => {
-    if (payload && typeof payload === 'string') {
-      setQrCustomPayload(payload);
-    }
-    setQrModalOpen(true);
+  const handleAddNewSampleOrder = async () => {
+    const newToken = Math.floor(10 + Math.random() * 89).toString();
+    const randomUtr = Math.floor(100000000000 + Math.random() * 900000000000).toString();
+    const newOrder = {
+      id: `ord-${Date.now()}`,
+      token: newToken,
+      shopName: 'Juice Center',
+      location: 'Near Sports Complex',
+      status: 'Pending',
+      pickupTime: 'In 10 Minutes',
+      dueTime: '2:45 PM',
+      estimatedTime: 'In 10 mins',
+      total: 95,
+      utr: randomUtr,
+      items: [
+        { name: '2x Fresh Orange Juice', price: 80 },
+        { name: '1x Crispy Punjabi Samosa (2 pcs)', price: 15 },
+      ],
+    };
+
+    try {
+      const res = await fetch('/api/vendor/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'create', order: newOrder }),
+      });
+      const data = await res.json();
+      if (data.success && data.order) {
+        setOrders((prev) => [data.order, ...prev]);
+        showNotification(`New order queued: #AIT-${newToken}`);
+        return;
+      }
+    } catch (e) {}
+    setOrders((prev) => [newOrder, ...prev]);
+    showNotification(`New order queued: #AIT-${newToken}`);
+  };
+
+  // Navigation handlers
+  const handleSelectTab = (tabId) => {
+    if (tabId === 'home') navigate('/');
+    else if (tabId === 'shops') {
+      navigate('/');
+      setTimeout(() => {
+        const el = document.getElementById('campus-shops');
+        if (el) el.scrollIntoView({ behavior: 'smooth' });
+      }, 50);
+    } else if (tabId === 'orders') navigate('/profile');
+    else if (tabId === 'wallet') navigate('/profile');
+    else if (tabId === 'vendor') navigate('/vendor');
   };
 
   const totalCartCount = cartItems.reduce((acc, it) => acc + it.quantity, 0);
@@ -784,141 +432,165 @@ export default function App() {
     (o) => !o.status || !o.status.toLowerCase().includes('ready')
   ).length;
 
+  // Active tab determination for Top Navbar
+  let currentActiveTab = 'home';
+  if (location.pathname === '/cart') currentActiveTab = 'cart';
+  else if (location.pathname === '/profile') currentActiveTab = 'wallet';
+  else if (location.pathname === '/support') currentActiveTab = 'support';
+  else if (location.pathname === '/vendor') currentActiveTab = 'vendor';
+  else if (location.pathname === '/live-status') currentActiveTab = 'orders';
+
   return (
     <div className="min-h-screen bg-[#ffffff] text-[#1f2937] flex flex-col font-sans">
-      
-      {/* Toast Alert Banner for Pre-Orders & Cart */}
+      {/* Toast Alert Banner */}
       {notification && (
-        <div className="fixed top-20 right-4 sm:right-6 z-50 bg-[#ffffff] border-2 border-[#6b21a8] text-gray-900 px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-200">
+        <div className="fixed top-20 right-4 sm:right-6 z-50 bg-[#ffffff] border-2 border-[#6b21a8] text-gray-900 px-4 py-3 rounded-xl shadow-xl flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-200">
           <CheckCircle2 className="w-5 h-5 text-[#6b21a8] flex-shrink-0" />
-          <span className="text-sm font-semibold">{notification}</span>
+          <span className="text-xs sm:text-sm font-bold">{notification}</span>
         </div>
       )}
 
       {/* Top Navigation Bar */}
       <Navbar
-        activeTab={
-          currentView === 'vendor'
-            ? 'vendor'
-            : currentView === 'juice-menu'
-            ? 'shops'
-            : currentView === 'order-status'
-            ? 'orders'
-            : currentView === 'wallet'
-            ? 'wallet'
-            : activeTab
-        }
+        activeTab={currentActiveTab}
         onSelectTab={handleSelectTab}
         onOpenLogin={() => setLoginModalOpen(true)}
-        onOpenCart={() => setIsCartOpen(true)}
-        onOpenQrGenerator={() => handleOpenQrGenerator('AIT-ORDER-TOKEN-42-NESCAFE-CONFIRMED')}
+        onOpenCart={() => navigate('/cart')}
+        onOpenQrGenerator={() => setQrModalOpen(true)}
         onOpenInstallPrompt={() => setShowA2hsPrompt(true)}
         orderCount={orders.length}
         pendingOrdersCount={pendingOrdersCount}
         cartCount={totalCartCount}
       />
 
-      {/* Main Content Sections */}
-      <main className="flex-1 bg-[#ffffff] pb-24">
-        {currentView === 'vendor' ? (
-          /* Vendor Dashboard (Minimalist Kanban board for canteen owners) */
-          <VendorDashboard
-            orders={orders}
-            onUpdateOrderStatus={handleUpdateOrderStatus}
-            onAddNewSampleOrder={handleAddNewSampleOrder}
-            onSwitchToStudentView={() => {
-              handleSelectTab('home');
-            }}
+      {/* Main Routed Page Content */}
+      <main className="flex-1 bg-[#ffffff]">
+        <Routes>
+          {/* 1. / (Home / Menu page) */}
+          <Route
+            path="/"
+            element={
+              <HomePage
+                cartItems={cartItems}
+                onAddToCart={handleAddToCartFromMenu}
+                onUpdateQuantity={handleUpdateCartQuantity}
+                onRemoveItem={handleRemoveCartItem}
+                groupSession={groupSession}
+                currentUser={currentUser}
+                onCreateGroupCart={() => setIsInviteModalOpen(true)}
+                onLeaveGroupCart={() => setGroupSession(null)}
+                onOpenInviteModal={() => setIsInviteModalOpen(true)}
+                onUpdateGroupCart={() => {}}
+                onOpenGroupCheckout={() => setIsGroupCheckoutOpen(true)}
+                onQuickOrder={handleQuickOrder}
+              />
+            }
           />
-        ) : currentView === 'order-status' ? (
-          /* Live Order Status Page (Shown after paying or tracking an order) */
-          <LiveOrderStatus
-            order={activeOrderForStatus || orders[0]}
-            onBackHome={() => {
-              setCurrentView('main');
-              handleSelectTab('home');
-            }}
-            onViewAllOrders={() => {
-              setCurrentView('main');
-              handleSelectTab('orders');
-            }}
-            onOpenQrGenerator={handleOpenQrGenerator}
-          />
-        ) : currentView === 'wallet' ? (
-          /* My Wallet & Analytics Dashboard with Chart.js */
-          <WalletAnalytics
-            onBackToMenu={() => {
-              setCurrentView('juice-menu');
-              setActiveTab('shops');
-              if (typeof window !== 'undefined') window.history.pushState({}, '', '/menu');
-            }}
-            onBrowseShops={() => {
-              handleBrowseShops();
-            }}
-            userId="usr-std-01"
-            userName={currentUser?.name || 'Aarav Sharma'}
-          />
-        ) : isGroupCheckoutOpen && groupSession ? (
-          /* Auto-Split Bill & Checkout for Group Cart */
-          <GroupSplitCheckout
-            session={groupSession}
-            currentUser={currentUser}
-            onPayShare={handlePayShare}
-            onDispatchOrder={handleDispatchGroupOrder}
-            onBackToMenu={() => setIsGroupCheckoutOpen(false)}
-          />
-        ) : currentView === 'juice-menu' ? (
-          /* Dedicated Menu Page for Juice Center with Multiplayer Group Cart */
-          <JuiceCenterMenu
-            onBackToShops={() => {
-              setCurrentView('main');
-              handleSelectTab('shops');
-            }}
-            onAddToCart={handleAddToCartFromMenu}
-            onUpdateQuantity={handleUpdateCartQuantity}
-            onRemoveFromCart={handleRemoveCartItem}
-            onOpenCart={() => setIsCartOpen(true)}
-            cartItems={cartItems}
-            groupSession={groupSession}
-            currentUser={currentUser}
-            onCreateGroupCart={handleCreateGroupCart}
-            onLeaveGroupCart={handleLeaveGroupCart}
-            onOpenInviteModal={() => setIsInviteModalOpen(true)}
-            onUpdateGroupCart={handleUpdateGroupCart}
-            onOpenGroupCheckout={() => setIsGroupCheckoutOpen(true)}
-          />
-        ) : (
-          /* Standard Campus Layout */
-          <>
-            {/* Clean Hero Section */}
-            <HeroSection onBrowseShops={handleBrowseShops} />
 
-            {/* How It Works (Clean 3 Steps) */}
-            <HowItWorks />
+          {/* Alias for /menu */}
+          <Route
+            path="/menu"
+            element={
+              <HomePage
+                cartItems={cartItems}
+                onAddToCart={handleAddToCartFromMenu}
+                onUpdateQuantity={handleUpdateCartQuantity}
+                onRemoveItem={handleRemoveCartItem}
+                groupSession={groupSession}
+                currentUser={currentUser}
+                onCreateGroupCart={() => setIsInviteModalOpen(true)}
+                onLeaveGroupCart={() => setGroupSession(null)}
+                onOpenInviteModal={() => setIsInviteModalOpen(true)}
+                onUpdateGroupCart={() => {}}
+                onOpenGroupCheckout={() => setIsGroupCheckoutOpen(true)}
+                onQuickOrder={handleQuickOrder}
+              />
+            }
+          />
 
-            {/* Campus Food Outlets & Pre-Ordering */}
-            <CampusShops
-              onQuickOrder={handleQuickOrder}
-              onOpenJuiceMenu={() => {
-                setCurrentView('juice-menu');
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }}
-            />
+          {/* 2. /cart (Checkout and Payment page) */}
+          <Route
+            path="/cart"
+            element={
+              <CartPage
+                cartItems={cartItems}
+                onUpdateQuantity={handleUpdateCartQuantity}
+                onRemoveItem={handleRemoveCartItem}
+                onConfirmOrder={handleConfirmOrder}
+                activePromo={activePromo}
+                onApplyPromo={(promo) => setActivePromo(promo)}
+                onRemovePromo={() => setActivePromo(null)}
+              />
+            }
+          />
 
-            {/* Live Orders Section */}
-            <MyOrdersSection
-              orders={orders}
-              onBrowseShops={handleBrowseShops}
-              onTrackOrder={handleTrackSpecificOrder}
-            />
-          </>
-        )}
+          {/* 3. /profile (User Wallet, Macros, and Order History) */}
+          <Route
+            path="/profile"
+            element={
+              <ProfilePage
+                currentUser={currentUser}
+                orders={orders}
+                onTrackOrder={(order) => {
+                  setActiveOrderForStatus(order);
+                  navigate('/live-status');
+                }}
+                onBrowseShops={() => navigate('/')}
+                onAddToCart={handleAddToCartFromMenu}
+              />
+            }
+          />
+
+          {/* Alias: /wallet redirects to /profile */}
+          <Route path="/wallet" element={<Navigate to="/profile" replace />} />
+
+          {/* 4. /support (Customer Support / Help page) */}
+          <Route
+            path="/support"
+            element={<SupportPage showNotification={showNotification} />}
+          />
+
+          {/* Additional core routes */}
+          <Route
+            path="/vendor"
+            element={
+              <div className="pb-24">
+                <VendorDashboard
+                  orders={orders}
+                  onUpdateOrderStatus={handleUpdateOrderStatus}
+                  onAddNewSampleOrder={handleAddNewSampleOrder}
+                  onSwitchToStudentView={() => navigate('/')}
+                />
+              </div>
+            }
+          />
+
+          <Route
+            path="/live-status"
+            element={
+              <div className="pb-24">
+                <LiveOrderStatus
+                  order={activeOrderForStatus || orders[0]}
+                  onBackHome={() => navigate('/')}
+                  onViewAllOrders={() => navigate('/profile')}
+                  onOpenQrGenerator={() => setQrModalOpen(true)}
+                />
+              </div>
+            }
+          />
+
+          {/* Catch-all route -> redirect to / */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
       </main>
 
-      {/* Clean Light-Themed Footer */}
+      {/* Light-Themed Footer */}
       <Footer onSelectTab={handleSelectTab} />
 
-      {/* Cart & Checkout Slide-Out Panel */}
+      {/* Sticky Bottom Navigation Bar with 4 Highly Visible Icons */}
+      <BottomNavigationBar cartCount={totalCartCount} />
+
+      {/* Slide-Out Checkout Panel (Optional quick drawer) */}
       <CartCheckoutPanel
         isOpen={isCartOpen}
         onClose={() => setIsCartOpen(false)}
@@ -932,12 +604,12 @@ export default function App() {
         onAddPromoItemToCart={handleAddFreePromoItemToCart}
       />
 
-      {/* Gamified Loyalty & Rewards Floating Widget */}
+      {/* Gamified Loyalty Rewards Widget */}
       <RewardsWidget
         userId="usr-std-01"
         activePromo={activePromo}
         onApplyPromo={(promo) => setActivePromo(promo)}
-        onOpenCart={() => setIsCartOpen(true)}
+        onOpenCart={() => navigate('/cart')}
         onAddToCart={handleAddFreePromoItemToCart}
         refreshTrigger={rewardsRefreshKey}
       />
@@ -946,12 +618,10 @@ export default function App() {
       <LoginModal
         isOpen={loginModalOpen}
         onClose={() => setLoginModalOpen(false)}
-        onLoginSuccess={(user) => {
-          showNotification(`Logged in as ${user.email}`);
-        }}
+        onLoginSuccess={(user) => showNotification(`Logged in as ${user.email}`)}
       />
 
-      {/* Dynamic QR Code Generator Modal (Powered by qrcode.js CDN) */}
+      {/* Dynamic QR Modal */}
       <QRCodeGenerator
         isModal={true}
         isOpen={qrModalOpen}
@@ -959,17 +629,15 @@ export default function App() {
         onClose={() => setQrModalOpen(false)}
       />
 
-      {/* Add to Home Screen (A2HS) Custom Install Prompt */}
+      {/* A2HS Custom Install Prompt */}
       <A2HSInstallPrompt
         isOpen={showA2hsPrompt}
         onClose={() => setShowA2hsPrompt(false)}
         orderToken={a2hsOrderToken}
-        onInstallSuccess={() => {
-          showNotification('🎉 AIT QuickBite added to Home Screen!');
-        }}
+        onInstallSuccess={() => showNotification('🎉 AIT QuickBite added to Home Screen!')}
       />
 
-      {/* Group Invite Modal (Shareable Link & QR) */}
+      {/* Group Cart Modals */}
       <GroupInviteModal
         isOpen={isInviteModalOpen}
         onClose={() => setIsInviteModalOpen(false)}
@@ -977,33 +645,26 @@ export default function App() {
         currentUser={currentUser}
       />
 
-      {/* Group Join Modal (Name & Avatar for friends joining via link) */}
       <GroupJoinModal
         isOpen={isJoinModalOpen}
         onClose={() => setIsJoinModalOpen(false)}
         sessionId={pendingJoinSessionId || groupSession?.id}
-        onJoin={handleJoinGroup}
+        onJoin={(name, avatar) => {
+          showNotification(`Welcome to Group Cart, ${name}!`);
+          setIsJoinModalOpen(false);
+        }}
       />
-
-      {/* Sticky Bottom Navigation Bar with Prominent Voice-to-Cart Mic Button */}
-      {currentView !== 'vendor' && (
-        <StickyBottomNav
-          activeTab={
-            currentView === 'juice-menu'
-              ? 'shops'
-              : currentView === 'order-status'
-              ? 'orders'
-              : activeTab
-          }
-          onSelectTab={handleSelectTab}
-          onOpenCart={() => setIsCartOpen(true)}
-          cartCount={totalCartCount}
-          cartItems={cartItems}
-          onVoiceOrderSuccess={handleVoiceOrderSuccess}
-          showNotification={(msg) => showNotification(msg)}
-        />
-      )}
-
     </div>
+  );
+}
+
+/**
+ * Main Application wrapped in React Router's BrowserRouter.
+ */
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AppContent />
+    </BrowserRouter>
   );
 }
