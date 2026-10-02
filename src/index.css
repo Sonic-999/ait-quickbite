@@ -2,53 +2,58 @@
 
 @layer base {
   :root {
-    --color-primary: #6b21a8;
-    --color-primary-hover: #581c87;
-    --color-primary-light: #f3e8ff;
-    --color-text-main: #1f2937;
-    --color-text-muted: #4b5563;
-    --color-border: #e5e7eb;
+    --color-primary: #164e3d; /* Fresh leafy deep green */
+    --color-primary-hover: #113f31;
+    --color-primary-light: #e8f2ec;
+    --color-primary-border: #c3dcd0;
+    --color-berry: #be185d; /* Playful raspberry */
+    --color-berry-hover: #9f1239; /* Deep plum / berry */
+    --color-berry-light: #fdf2f4;
+    --color-text-main: #2a221e; /* Deep cocoa brown / slate */
+    --color-text-muted: #605249; /* Warm cocoa mocha */
+    --color-border: #e4eae2; /* Herb-tinted soft border */
+    --bg-app: #faf8f5; /* Clean, airy off-white */
     --bg-white: #ffffff;
   }
 
   html {
     scroll-behavior: smooth;
-    background-color: #ffffff;
+    background-color: #faf8f5;
   }
 
   body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    background-color: #ffffff;
-    color: #1f2937;
+    background-color: #faf8f5;
+    color: #2a221e;
     letter-spacing: -0.011em;
     min-height: 100vh;
   }
 
   h1, h2, h3, h4, h5, h6 {
-    color: #111827;
+    color: #2a221e;
     letter-spacing: -0.025em;
   }
 }
 
-/* Clean, standard light-themed scrollbar */
+/* Fresh botanical themed scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: #ffffff;
+  background: #faf8f5;
 }
 ::-webkit-scrollbar-thumb {
-  background: #d1d5db;
+  background: #d4ded6;
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #9ca3af;
+  background: #b5c5b9;
 }
 
-/* Subtle focus ring for accessibility */
+/* Leafy green focus ring for accessibility */
 button:focus-visible, a:focus-visible, input:focus-visible {
-  outline: 2px solid #6b21a8;
+  outline: 2px solid #164e3d;
   outline-offset: 2px;
 }
 
@@ -62,8 +67,8 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 }
 
 /* ========================================================================== */
-/* SKELETON SCREEN SHIMMER ANIMATION (SWIGGY / BLINKIT STYLE)                */
-/* Linear gradient animation creating a smooth, pulsing shimmer effect       */
+/* SKELETON SCREEN SHIMMER ANIMATION (HERB GARDEN PALETTE)                    */
+/* Botanical linear gradients for zero layout shifts (CLS = 0)                */
 /* ========================================================================== */
 
 @keyframes skeleton-shimmer {
@@ -78,11 +83,11 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .shimmer-skeleton {
   background: linear-gradient(
     90deg,
-    #f3f4f6 0%,
-    #e5e7eb 25%,
-    #f9fafb 50%,
-    #e5e7eb 75%,
-    #f3f4f6 100%
+    #f2f6f2 0%,
+    #e2ebe2 25%,
+    #f8faf8 50%,
+    #e2ebe2 75%,
+    #f2f6f2 100%
   );
   background-size: 200% 100%;
   animation: skeleton-shimmer 1.6s ease-in-out infinite;
@@ -91,11 +96,24 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .shimmer-skeleton-darker {
   background: linear-gradient(
     90deg,
-    #e5e7eb 0%,
-    #d1d5db 25%,
-    #f3f4f6 50%,
-    #d1d5db 75%,
-    #e5e7eb 100%
+    #dde8df 0%,
+    #cbd8ce 25%,
+    #e8f0ea 50%,
+    #cbd8ce 75%,
+    #dde8df 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.6s ease-in-out infinite;
+}
+
+.shimmer-skeleton-dark {
+  background: linear-gradient(
+    90deg,
+    #0c2118 0%,
+    #143326 25%,
+    #1d4534 50%,
+    #143326 75%,
+    #0c2118 100%
   );
   background-size: 200% 100%;
   animation: skeleton-shimmer 1.6s ease-in-out infinite;
@@ -104,11 +122,11 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .shimmer-skeleton-subtle {
   background: linear-gradient(
     90deg,
-    #f9fafb 0%,
-    #f3f4f6 25%,
+    #f7faf7 0%,
+    #edf3ee 25%,
     #ffffff 50%,
-    #f3f4f6 75%,
-    #f9fafb 100%
+    #edf3ee 75%,
+    #f7faf7 100%
   );
   background-size: 200% 100%;
   animation: skeleton-shimmer 1.6s ease-in-out infinite;
@@ -139,7 +157,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   }
   30% {
     transform: scale(1.09);
-    box-shadow: 0 0 28px rgba(107, 33, 168, 0.45), 0 20px 25px -5px rgba(0, 0, 0, 0.18);
+    box-shadow: 0 0 28px rgba(190, 24, 93, 0.45), 0 20px 25px -5px rgba(0, 0, 0, 0.18);
   }
   60% {
     transform: scale(0.96);
@@ -238,6 +256,42 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   animation: steam-float 1.4s ease-out infinite;
 }
 
+/* ========================================================================== */
+/* BENTO BOX GRID & SLEEK GLASSMORPHISM STYLES (HERB GARDEN PALETTE)          */
+/* ========================================================================== */
 
+.bento-grid {
+  display: grid;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+  grid-auto-flow: dense;
+  grid-auto-rows: 240px;
+  gap: 1.25rem;
+}
 
+@media (min-width: 640px) {
+  .bento-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-rows: 260px;
+    gap: 1.5rem;
+  }
+}
 
+@media (min-width: 1024px) {
+  .bento-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-auto-rows: 270px;
+  }
+}
+
+.bento-card-glass {
+  background: rgba(12, 34, 25, 0.82);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(167, 243, 208, 0.22);
+  box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.5);
+}
+
+.bento-card-glass:hover {
+  background: rgba(12, 34, 25, 0.90);
+  border-color: rgba(167, 243, 208, 0.35);
+}

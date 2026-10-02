@@ -1,5 +1,6 @@
 import { Server as SocketIOServer } from 'socket.io';
 import db from './db.js';
+import { calculateLiveKitchenQueue } from './services/etaService.js';
 
 let io = null;
 
@@ -176,7 +177,25 @@ export function initSocketServer(httpServer) {
     });
 
     /**
-     * VENDOR ACTION: Mark order as Ready
+     * Live Kitchen Queue: Subscribe or fetch current dynamic prep time
+     */
+    socket.on('queue:get_status', (payload, callback) => {
+      try {
+        const orderId = payload?.orderId;
+        const shop = payload?.shop;
+        const queueData = calculateLiveKitchenQueue(orderId, shop);
+        if (typeof callback === 'function') {
+          callback(queueData);
+        } else {
+          socket.emit('kitchen:queue_updated', queueData);
+        }
+      } catch (err) {
+        if (typeof callback === 'function') callback({ success: false, error: err.message });
+      }
+    });
+
+    /**
+     * VENDOR / KDS ACTION: Update order status (Preparing, Ready, Completed, etc.)
      * Can be invoked directly via socket event as an alternative to REST POST
      */
     socket.on('order:mark_ready', ({ orderId }) => {
@@ -194,6 +213,47 @@ export function initSocketServer(httpServer) {
         }
       } catch (err) {
         console.error('[Socket order:mark_ready Error]', err);
+      }
+    });
+
+    socket.on('order:update_status', ({ orderId, status }) => {
+      if (!orderId || !status) return;
+      try {
+        const updateStmt = db.prepare(`
+          UPDATE Orders
+          SET status = ?, updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `);
+        const result = updateStmt.run(status, orderId);
+        if (result.changes > 0) {
+          notifyOrderStatus(orderId, status);
+        }
+      } catch (err) {
+        console.error('[Socket order:update_status Error]', err);
+      }
+    });
+
+    socket.on('kds:join', ({ pin, vendorId } = {}) => {
+      socket.join('room_all_vendors');
+      socket.join('room_kds_display');
+      console.log(`[Socket.IO] KDS Terminal (${vendorId || socket.id}) joined room_kds_display`);
+      socket.emit('kds:joined', { success: true, socketId: socket.id });
+    });
+
+    socket.on('kds:update_status', ({ orderId, status }) => {
+      if (!orderId || !status) return;
+      try {
+        const updateStmt = db.prepare(`
+          UPDATE Orders
+          SET status = ?, updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `);
+        const result = updateStmt.run(status, orderId);
+        if (result.changes > 0) {
+          notifyOrderStatus(orderId, status);
+        }
+      } catch (err) {
+        console.error('[Socket kds:update_status Error]', err);
       }
     });
 
@@ -375,13 +435,28 @@ export function notifyNewOrder(order) {
       timestamp: new Date().toISOString(),
     });
   }
+
+  // Broadcast to KDS display and all connected admin clients
+  io.emit('order:new', {
+    order,
+    room: targetRoom,
+    timestamp: new Date().toISOString(),
+  });
+  io.emit('kds:new_order', {
+    order,
+    timestamp: new Date().toISOString(),
+  });
+
+  // Real-time broadcast: Live Kitchen Queue ETA update
+  broadcastKitchenQueueUpdate(order.shop_name || order.shopName);
 }
 
 /**
- * Emits order status updates (e.g. 'Ready') to:
- * 1. The shop room (for KDS UI update)
+ * Emits order status updates (e.g. 'Preparing', 'Ready') to:
+ * 1. The shop room & room_all_vendors (for KDS UI update)
  * 2. The specific student's socket ID (for live tracking + HTML5 Push Notification)
  * 3. The specific order tracking room (room_order_{id})
+ * 4. Global broadcast so all student phones and KDS displays update instantaneously
  */
 export function notifyOrderStatus(orderId, status, updatedOrder = null) {
   if (!io || !orderId) return;
@@ -416,10 +491,11 @@ export function notifyOrderStatus(orderId, status, updatedOrder = null) {
 
   const shopName = order ? (order.shop_name || order.shopName) : null;
   const targetRoom = getShopRoom(shopName);
+  const orderRoom = `room_order_${orderId}`;
 
-  console.log(`[Socket.IO] Emitting 'order:status_updated' to room ${targetRoom} for Order #${order?.token || orderId} -> Status: ${status}`);
+  console.log(`[Socket.IO] Emitting 'order:status_updated' to room ${targetRoom} and ${orderRoom} for Order #${order?.token || orderId} -> Status: ${status}`);
 
-  // 1. Emit status update to vendor room(s)
+  // 1. Emit status update to vendor room(s) and specific order tracking room
   io.to(targetRoom).emit('order:status_updated', {
     orderId,
     status,
@@ -432,6 +508,28 @@ export function notifyOrderStatus(orderId, status, updatedOrder = null) {
       order,
     });
   }
+
+  // 2. Emit status update to order tracking room (instant live student phone update!)
+  io.to(orderRoom).emit('order:status_updated', {
+    orderId,
+    status,
+    order,
+  });
+
+  // 3. Broadcast status updated to all clients (including KDS displays)
+  io.emit('order:status_updated', {
+    orderId,
+    status,
+    order,
+  });
+  io.emit('kds:status_updated', {
+    orderId,
+    status,
+    order,
+  });
+
+  // Real-time broadcast: Live Kitchen Queue ETA update as orders are cleared or updated
+  broadcastKitchenQueueUpdate(shopName);
 
   // 2. If status is 'Ready', notify the specific student's socket ID and order room!
   if (status && status.toLowerCase() === 'ready') {
@@ -492,5 +590,20 @@ export function notifyTrendingUpdated(trendingItems) {
     trendingItems,
     timestamp: new Date().toISOString(),
   });
+}
+
+/**
+ * Broadcasts dynamic live kitchen queue prep time to all connected clients
+ * whenever orders are added, cleared, or marked ready.
+ */
+export function broadcastKitchenQueueUpdate(shopName = null) {
+  if (!io) return;
+  try {
+    const queueData = calculateLiveKitchenQueue(null, shopName);
+    console.log(`[Socket.IO] Emitting 'kitchen:queue_updated' -> Active: ${queueData.activeOrdersCount}, ETA: ${queueData.estimated_prep_time} mins`);
+    io.emit('kitchen:queue_updated', queueData);
+  } catch (err) {
+    console.error('[Socket.IO broadcastKitchenQueueUpdate Error]', err);
+  }
 }
 

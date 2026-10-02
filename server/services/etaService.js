@@ -206,3 +206,88 @@ export function calculateDynamicETA({ shop = 'Juice Center', items = [] }) {
     maxAllowedMinutes: 60,
   };
 }
+
+/**
+ * Live Kitchen Queue Calculation:
+ * Dynamically computes estimated_prep_time based on active/pending orders in SQLite Orders table.
+ * Formula: Base time of 5 mins + 2 mins per pending order.
+ * If targetOrderId is provided, calculates queue position and prep time for that specific order.
+ */
+export function calculateLiveKitchenQueue(targetOrderId = null, targetShop = null) {
+  try {
+    let query = `
+      SELECT id, token, shop_name, status, user_id, user_name, total, items, created_at
+      FROM Orders
+      WHERE LOWER(status) NOT IN ('ready', 'ready for pickup', 'completed', 'delivered', 'cancelled')
+    `;
+    const params = [];
+
+    if (targetShop && targetShop !== 'all' && targetShop !== 'All Shops') {
+      const cleanShop = normalizeShop(targetShop);
+      query += ` AND LOWER(REPLACE(REPLACE(shop_name, ' ', ''), '-', '')) LIKE ?`;
+      params.push(`%${cleanShop}%`);
+    }
+
+    query += ` ORDER BY created_at ASC`;
+
+    const activeOrders = db.prepare(query).all(...params);
+    const activeOrdersCount = activeOrders.length;
+
+    // Base time of 5 mins + 2 mins per pending order
+    const basePrepMinutes = 5;
+    const additionalPerOrderMinutes = 2;
+    const estimated_prep_time = basePrepMinutes + (activeOrdersCount * additionalPerOrderMinutes);
+
+    let orderPosition = null;
+    let ordersAhead = 0;
+    let orderEstimatedPrepMinutes = estimated_prep_time;
+
+    if (targetOrderId) {
+      const idx = activeOrders.findIndex((o) => o.id === targetOrderId || o.token === targetOrderId);
+      if (idx !== -1) {
+        orderPosition = idx + 1; // 1st in line, 2nd in line, etc.
+        ordersAhead = idx;
+        orderEstimatedPrepMinutes = basePrepMinutes + (ordersAhead * additionalPerOrderMinutes);
+      }
+    }
+
+    return {
+      success: true,
+      activeOrdersCount,
+      estimated_prep_time, // Overall kitchen estimated prep time in minutes
+      estimatedPrepSeconds: estimated_prep_time * 60,
+      basePrepMinutes,
+      additionalPerOrderMinutes,
+      targetOrderId,
+      orderPosition,
+      ordersAhead,
+      orderEstimatedPrepMinutes,
+      orderEstimatedPrepSeconds: orderEstimatedPrepMinutes * 60,
+      activeOrders: activeOrders.map((o, idx) => ({
+        id: o.id,
+        token: o.token,
+        shopName: o.shop_name,
+        status: o.status,
+        position: idx + 1,
+        ordersAhead: idx,
+        estimated_prep_time: basePrepMinutes + (idx * additionalPerOrderMinutes),
+        estimatedPrepSeconds: (basePrepMinutes + (idx * additionalPerOrderMinutes)) * 60,
+      })),
+      timestamp: new Date().toISOString(),
+    };
+  } catch (err) {
+    console.error('[etaService] calculateLiveKitchenQueue Error:', err);
+    return {
+      success: false,
+      activeOrdersCount: 0,
+      estimated_prep_time: 5,
+      estimatedPrepSeconds: 300,
+      basePrepMinutes: 5,
+      additionalPerOrderMinutes: 2,
+      ordersAhead: 0,
+      orderEstimatedPrepMinutes: 5,
+      orderEstimatedPrepSeconds: 300,
+      timestamp: new Date().toISOString(),
+    };
+  }
+}

@@ -183,9 +183,9 @@ export default function RewardsWidget({
   return (
     <>
       {/* ------------------------------------------------------------- */}
-      {/* Floating 'Rewards' Widget Button (Bottom Right)              */}
+      {/* Floating 'Rewards' Widget Button (Bottom Left)               */}
       {/* ------------------------------------------------------------- */}
-      <aside aria-label="Loyalty Rewards" className="fixed bottom-20 right-4 sm:bottom-22 sm:right-6 z-40 select-none">
+      <aside aria-label="Loyalty Rewards" className="fixed bottom-20 left-4 sm:bottom-22 sm:left-6 z-40 select-none">
         <button
           id="btn-floating-rewards-widget"
           onClick={() => {

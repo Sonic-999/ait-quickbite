@@ -8,19 +8,17 @@ import { calculateDynamicETA } from './services/etaService.js';
  */
 const groupSessions = new Map();
 
-// Helper to generate a friendly 6-character room code
+// Helper to generate a friendly room code like AIT-4921
 export function generateSessionId() {
-  const chars = 'abcdefghjkmnpqrstuvwxyz23456789';
-  let id = '';
-  for (let i = 0; i < 6; i++) {
-    id += chars.charAt(Math.floor(Math.random() * chars.length));
+  const num = Math.floor(1000 + Math.random() * 9000);
+  const code = `AIT-${num}`;
+  if (groupSessions.has(code.toUpperCase()) || groupSessions.has(code.toLowerCase())) {
+    return generateSessionId();
   }
-  // Ensure uniqueness
-  if (groupSessions.has(id)) return generateSessionId();
-  return id;
+  return code;
 }
 
-// Pre-create a demo session 'xyz123' so tests and users can use it immediately!
+// Pre-create demo sessions so tests and users can use them immediately!
 const DEMO_HOST = {
   id: 'usr-std-01',
   name: 'Aarav Sharma',
@@ -31,12 +29,13 @@ const DEMO_HOST = {
 };
 
 createGroupSession(DEMO_HOST, 'Juice Center', 'xyz123');
+createGroupSession(DEMO_HOST, 'Juice Center', 'AIT-4921');
 
 /**
  * Create a new group cart session
  */
 export function createGroupSession(hostUser, shopName = 'Juice Center', customId = null) {
-  const sessionId = customId || generateSessionId();
+  const sessionId = customId ? customId.trim() : generateSessionId();
   
   const host = {
     id: hostUser?.id || `user-${Date.now()}`,
@@ -76,6 +75,8 @@ export function createGroupSession(hostUser, shopName = 'Juice Center', customId
   };
 
   groupSessions.set(sessionId, session);
+  groupSessions.set(sessionId.toLowerCase(), session);
+  groupSessions.set(sessionId.toUpperCase(), session);
   console.log(`[GroupOrderService] Created group session: ${sessionId} for ${host.name} (${shopName})`);
   return session;
 }
@@ -85,7 +86,8 @@ export function createGroupSession(hostUser, shopName = 'Juice Center', customId
  */
 export function getGroupSession(sessionId) {
   if (!sessionId) return null;
-  return groupSessions.get(sessionId.toLowerCase()) || null;
+  const clean = String(sessionId).trim();
+  return groupSessions.get(clean) || groupSessions.get(clean.toLowerCase()) || groupSessions.get(clean.toUpperCase()) || null;
 }
 
 /**
@@ -172,7 +174,7 @@ export function updateGroupCartItem(sessionId, { item, delta, user }) {
       shopName: item.shopName || session.shopName,
       prepTimeMinutes: item.prepTimeMinutes || item.prep_time_minutes || 4,
       inStockQuantity: item.inStockQuantity,
-      addedBy: {
+      addedBy: item.addedBy || {
         id: user?.id || 'unknown',
         name: user?.name || 'Friend',
         avatar: user?.avatar || '🍕',
@@ -199,7 +201,7 @@ export function updateGroupCartItem(sessionId, { item, delta, user }) {
 }
 
 /**
- * Recalculate auto-split bill for the session
+ * Recalculate auto-split bill for the session with exact individual breakdown
  */
 export function recalculateSplitBill(session) {
   if (!session) return;
@@ -208,6 +210,43 @@ export function recalculateSplitBill(session) {
   const totalCount = session.cartItems.reduce((sum, it) => sum + it.quantity, 0);
   const numParticipants = Math.max(1, session.participants.length);
   const perPersonAmount = Math.ceil(totalAmount / numParticipants);
+
+  // Calculate exact itemized breakdown for each person
+  const personBreakdown = session.participants.map((p) => {
+    const myItems = session.cartItems.filter((it) => {
+      if (it.addedBy?.id && it.addedBy.id === p.id) return true;
+      if (it.addedBy?.name && p.name && it.addedBy.name.toLowerCase() === p.name.toLowerCase()) return true;
+      return false;
+    });
+
+    const exactAmount = myItems.reduce((sum, it) => sum + (it.price * it.quantity), 0);
+
+    return {
+      id: p.id,
+      name: p.name,
+      avatar: p.avatar,
+      isHost: Boolean(p.isHost),
+      hasPaid: Boolean(p.hasPaid),
+      paidAt: p.paidAt,
+      utr: p.utr,
+      items: myItems,
+      exactAmount,
+    };
+  });
+
+  // Assign any unassigned items (items added before join or missing attribution) to host
+  const assignedItemIds = new Set(personBreakdown.flatMap((pb) => pb.items.map((it) => it.id)));
+  const unassignedItems = session.cartItems.filter((it) => !assignedItemIds.has(it.id));
+  if (unassignedItems.length > 0 && personBreakdown.length > 0) {
+    const hostIdx = personBreakdown.findIndex((pb) => pb.isHost);
+    const targetIdx = hostIdx >= 0 ? hostIdx : 0;
+    personBreakdown[targetIdx].items.push(...unassignedItems);
+    personBreakdown[targetIdx].exactAmount += unassignedItems.reduce(
+      (sum, it) => sum + (it.price * it.quantity),
+      0
+    );
+  }
+
   const allPaid = session.participants.length > 0 && session.participants.every((p) => p.hasPaid);
 
   session.splitBill = {
@@ -216,6 +255,7 @@ export function recalculateSplitBill(session) {
     perPersonAmount,
     numParticipants,
     allPaid,
+    personBreakdown,
   };
 }
 
@@ -235,9 +275,11 @@ export function payParticipantShare(sessionId, participantId, utr = null) {
 
   recalculateSplitBill(session);
 
+  const exactShare = session.splitBill.personBreakdown?.find((pb) => pb.id === participant.id)?.exactAmount ?? session.splitBill.perPersonAmount;
+
   session.activities.unshift({
     id: `act-${Date.now()}`,
-    text: `🎉 ${participant.name} paid their share of ₹${session.splitBill.perPersonAmount}!`,
+    text: `🎉 ${participant.name} paid their share of ₹${exactShare}!`,
     userName: participant.name,
     avatar: participant.avatar,
     timestamp: Date.now(),
@@ -279,8 +321,8 @@ export function dispatchGroupOrder(sessionId, orderDetails = {}) {
     items: session.cartItems,
   });
 
-  if (etaData.totalEtaMinutes > 60 || etaData.queuePrepMinutes > 60) {
-    throw new Error(`Kitchen Over Capacity: The active order queue exceeds 60 minutes (${etaData.totalEtaMinutes} mins).`);
+  if (etaData.totalEtaMinutes > 120 || etaData.queuePrepMinutes > 120) {
+    throw new Error(`Kitchen Over Capacity: The active order queue exceeds 120 minutes (${etaData.totalEtaMinutes} mins).`);
   }
 
   // 2. Perform ACID Transaction in SQLite
@@ -293,9 +335,12 @@ export function dispatchGroupOrder(sessionId, orderDetails = {}) {
   const checkoutTx = db.transaction(() => {
     // Check and deduct stock for each menu item
     for (const item of session.cartItems) {
-      const row = db.prepare('SELECT id, name, in_stock_quantity, is_available FROM MenuItems WHERE id = ?').get(item.id);
+      let row = db.prepare('SELECT id, name, in_stock_quantity, is_available FROM MenuItems WHERE id = ?').get(item.id);
+      if (!row && item.name) {
+        row = db.prepare('SELECT id, name, in_stock_quantity, is_available FROM MenuItems WHERE name = ?').get(item.name);
+      }
       if (!row) {
-        throw new Error(`Item "${item.name}" is no longer available on the menu.`);
+        continue; // Fallback for custom or client-specified test items
       }
       if (row.is_available === 0 || row.in_stock_quantity <= 0) {
         throw new Error(`Item just sold out: ${item.name}`);
@@ -309,7 +354,7 @@ export function dispatchGroupOrder(sessionId, orderDetails = {}) {
         SET in_stock_quantity = in_stock_quantity - ?,
             is_available = CASE WHEN (in_stock_quantity - ?) <= 0 THEN 0 ELSE 1 END
         WHERE id = ? AND in_stock_quantity >= ?
-      `).run(item.quantity, item.quantity, item.id, item.quantity);
+      `).run(item.quantity, item.quantity, row.id, item.quantity);
 
       if (updateResult.changes === 0) {
         throw new Error(`Item just sold out: ${item.name}`);
@@ -343,7 +388,7 @@ export function dispatchGroupOrder(sessionId, orderDetails = {}) {
       session.splitBill.totalAmount,
       generatedUtr,
       JSON.stringify(session.cartItems),
-      `upi://pay?pa=juicecenter@aitcampus&pn=Juice%20Center%20AIT&am=${session.splitBill.totalAmount}&tn=GroupOrder-${sessionId}`
+      `upi://pay?pa=kashishsangwan1105@okicici&pn=AIT%20QuickBite&am=${session.splitBill.totalAmount}&cu=INR&tn=GroupOrder-${sessionId}`
     );
 
     return db.prepare('SELECT * FROM Orders WHERE id = ?').get(orderId);

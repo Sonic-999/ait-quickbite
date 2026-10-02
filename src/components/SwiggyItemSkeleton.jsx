@@ -6,7 +6,7 @@ import React from 'react';
  * and layout of modern Swiggy/Blinkit/Zomato item cards.
  * Powered by CSS linear-gradient pulsing animation for zero layout shifts (CLS = 0).
  */
-export default function SwiggyItemSkeleton({ count = 5 }) {
+export default function SwiggyItemSkeleton({ count = 6 }) {
   const skeletonArray = Array.from({ length: count }, (_, i) => i);
 
   return (
@@ -25,60 +25,43 @@ export default function SwiggyItemSkeleton({ count = 5 }) {
           <div className="h-6 w-18 rounded-full shimmer-skeleton self-start sm:self-auto" />
         </div>
 
-        {/* 4 to 6 Shimmering Item Cards Separated by Subtle Border */}
-        <div className="divide-y divide-gray-100" aria-busy="true" aria-live="polite">
-          {skeletonArray.map((idx) => (
-            <div
-              key={`skeleton-card-${idx}`}
-              className="p-5 sm:p-6 flex items-start justify-between gap-4 sm:gap-8 relative overflow-hidden bg-[#ffffff]"
-            >
-              {/* ======================================================== */}
-              {/* LEFT SIDE (TEXT): Veg Icon, Title, Price, Description     */}
-              {/* ======================================================== */}
-              <div className="flex-1 pr-2 sm:pr-4">
-                {/* Veg Icon & Badge Placeholder */}
-                <div className="flex items-center gap-2 mb-2.5">
-                  <div className="w-4 h-4 rounded-[3px] shimmer-skeleton border border-gray-200/80 shadow-2xs" />
-                  {idx % 2 === 0 && (
-                    <div className="h-4 w-16 sm:w-20 rounded shimmer-skeleton" />
-                  )}
+        {/* Asymmetric Bento Box Skeleton Grid */}
+        <div className="p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 auto-rows-[260px] sm:auto-rows-[280px] grid-flow-dense" aria-busy="true" aria-live="polite">
+          {skeletonArray.map((idx) => {
+            const isLarge = idx === 0;
+            return (
+              <div
+                key={`skeleton-card-${idx}`}
+                className={`rounded-2xl sm:rounded-3xl overflow-hidden relative border border-gray-800/80 bg-gray-950 flex flex-col justify-end p-2.5 sm:p-3 shadow-md ${
+                  isLarge
+                    ? 'col-span-1 sm:col-span-2 row-span-2 min-h-[400px] sm:min-h-[580px]'
+                    : 'col-span-1 row-span-1 min-h-[260px] sm:min-h-[280px]'
+                }`}
+              >
+                {/* Image Shimmer Area */}
+                <div className="absolute inset-0 shimmer-skeleton-dark" />
+
+                {/* Top Badge Shimmer */}
+                <div className="absolute top-3 left-3 z-10">
+                  <div className={`h-6 rounded-full shimmer-skeleton-darker ${isLarge ? 'w-28' : 'w-20'}`} />
                 </div>
 
-                {/* Bold Item Name Placeholder */}
-                <div
-                  className="h-5 sm:h-6 rounded-md shimmer-skeleton mb-2"
-                  style={{ width: idx % 2 === 0 ? '58%' : '48%' }}
-                />
-
-                {/* Price Line Placeholder */}
-                <div className="h-4 sm:h-5 rounded shimmer-skeleton w-16 sm:w-20 mb-3 mt-1" />
-
-                {/* Short, Two-line Muted Description Placeholder */}
-                <div className="space-y-1.5 max-w-xl">
-                  <div className="h-3 sm:h-3.5 rounded shimmer-skeleton-subtle w-full" />
-                  <div
-                    className="h-3 sm:h-3.5 rounded shimmer-skeleton-subtle"
-                    style={{ width: idx % 2 === 0 ? '78%' : '65%' }}
-                  />
-                </div>
-              </div>
-
-              {/* ======================================================== */}
-              {/* RIGHT SIDE (IMAGE & BUTTON): Square image & ADD button   */}
-              {/* ======================================================== */}
-              <div className="relative flex-shrink-0 flex flex-col items-center pb-3 pt-0.5">
-                {/* High-quality square image placeholder with slightly rounded corners */}
-                <div className="w-28 h-28 sm:w-36 sm:h-36 aspect-square rounded-xl shimmer-skeleton border border-gray-200/80 shadow-2xs relative overflow-hidden" />
-
-                {/* Rectangular primary-colored 'ADD' button placeholder overlapping bottom center */}
-                <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 z-10">
-                  <div className="w-20 sm:w-24 h-7 sm:h-8 rounded-lg shimmer-skeleton-darker shadow-xs border border-gray-200/80 flex items-center justify-center">
-                    <div className="w-8 h-2.5 rounded shimmer-skeleton-subtle opacity-70" />
+                {/* Glassmorphic Overlay Skeleton */}
+                <div className="relative z-10 m-2 sm:m-2.5 p-3 sm:p-3.5 rounded-xl sm:rounded-2xl bg-gray-950/75 backdrop-blur-md border border-white/10 space-y-2 shadow-2xl">
+                  <div className="flex items-center gap-1.5">
+                    <div className="h-3.5 w-14 rounded-full shimmer-skeleton-darker" />
+                    <div className="h-3.5 w-16 rounded-full shimmer-skeleton-darker" />
+                  </div>
+                  <div className="h-4 sm:h-5 w-3/4 rounded-md shimmer-skeleton-darker" />
+                  <div className="h-2.5 sm:h-3 w-full rounded shimmer-skeleton-dark" />
+                  <div className="flex justify-between items-center pt-2 border-t border-white/10">
+                    <div className="h-4 w-12 rounded shimmer-skeleton-darker" />
+                    <div className="h-7 w-20 rounded-lg shimmer-skeleton-darker" />
                   </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>

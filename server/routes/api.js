@@ -1,7 +1,7 @@
 import express from 'express';
 import db from '../db.js';
 import { notifyNewOrder, notifyOrderStatus, notifyStockUpdated } from '../socket.js';
-import { calculateDynamicETA } from '../services/etaService.js';
+import { calculateDynamicETA, calculateLiveKitchenQueue } from '../services/etaService.js';
 import { creditUserBitecoins, getUserRewardsStatus, redeemBitecoinsReward } from '../services/loyaltyService.js';
 import { getTrendingItems, broadcastTrendingUpdates } from '../services/trendingService.js';
 
@@ -815,6 +815,22 @@ router.get(['/health', '/api/health'], (req, res) => {
     });
   } catch (err) {
     return res.status(500).json({ status: 'error', error: err.message });
+  }
+});
+
+/**
+ * ----------------------------------------------------------------------
+ * 8b. GET /kitchen/queue (and /api/kitchen/queue)
+ * Live Kitchen Queue calculation: Base 5 mins + 2 mins per pending order
+ * ----------------------------------------------------------------------
+ */
+router.get(['/kitchen/queue', '/api/kitchen/queue'], (req, res) => {
+  try {
+    const { orderId, shop } = req.query;
+    const queueData = calculateLiveKitchenQueue(orderId, shop);
+    return res.json(queueData);
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 

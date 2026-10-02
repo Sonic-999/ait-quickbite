@@ -49,10 +49,10 @@ export default function HomePage({
   };
 
   return (
-    <div className="min-h-screen bg-gray-50/50 pb-28">
+    <div className="min-h-screen bg-[#faf8f5] pb-28">
       {/* 1. Multiplayer Group Cart Presence Bar (if active) */}
       {groupSession && (
-        <div className="sticky top-16 z-30 px-3 py-2 bg-gradient-to-r from-purple-700 via-indigo-700 to-purple-800 text-white shadow-md">
+        <div className="sticky top-16 z-30 px-3 py-2 bg-gradient-to-r from-[#164e3d] via-[#1f5c49] to-[#2d6a4f] text-white shadow-md">
           <div className="max-w-5xl mx-auto flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="flex h-2.5 w-2.5 relative">
@@ -73,7 +73,7 @@ export default function HomePage({
               </button>
               <Link
                 to="/cart"
-                className="text-xs font-bold bg-amber-400 hover:bg-amber-300 text-gray-900 px-3 py-1 rounded-lg transition-colors flex items-center gap-1 shadow-xs"
+                className="text-xs font-bold bg-gradient-to-r from-[#d81b60] to-[#be185d] text-white px-3 py-1 rounded-lg transition-colors flex items-center gap-1 shadow-xs hover:from-[#be185d] hover:to-[#9f1239]"
               >
                 <span>Checkout</span>
                 <ArrowRight className="w-3.5 h-3.5" />
@@ -90,13 +90,13 @@ export default function HomePage({
       <div id="campus-shops" className="max-w-6xl mx-auto px-4 sm:px-6 pt-6">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h2 className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight flex items-center gap-2">
+            <h2 className="text-xl sm:text-2xl font-black text-[#164e3d] tracking-tight flex items-center gap-2">
               <span>Campus Outlets</span>
-              <span className="text-xs font-bold uppercase tracking-wider bg-purple-100 text-[#6b21a8] px-2 py-0.5 rounded-full">
+              <span className="text-xs font-bold uppercase tracking-wider bg-[#e8f2ec] text-[#164e3d] px-2.5 py-0.5 rounded-full">
                 Instant Pickup
               </span>
             </h2>
-            <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
+            <p className="text-xs sm:text-sm text-[#605249] mt-0.5">
               Order ahead to skip queue during 10-minute class breaks
             </p>
           </div>
@@ -110,7 +110,7 @@ export default function HomePage({
 
       {/* 4. Full Campus Menu Section */}
       <div id="campus-menu-section" className="max-w-6xl mx-auto px-4 sm:px-6 pt-10">
-        <div className="border-t border-gray-200/80 pt-8">
+        <div className="border-t border-[#e4eae2] pt-8">
           <JuiceCenterMenu
             onBackToShops={scrollToMenu}
             onAddToCart={onAddToCart}
@@ -141,7 +141,7 @@ export default function HomePage({
             <Link
               to="/cart"
               id="home-floating-cart-bar"
-              className="bg-gradient-to-r from-emerald-600 via-teal-700 to-[#6b21a8] text-white p-3.5 rounded-2xl shadow-xl flex items-center justify-between hover:scale-[1.01] active:scale-[0.99] transition-all cursor-pointer ring-2 ring-white/60"
+              className="bg-gradient-to-r from-[#164e3d] via-[#1f5c49] to-[#2d6a4f] text-white p-3.5 rounded-2xl shadow-xl flex items-center justify-between hover:scale-[1.01] active:scale-[0.99] transition-all cursor-pointer ring-2 ring-white/60"
             >
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center font-black text-sm">
@@ -160,9 +160,9 @@ export default function HomePage({
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 bg-white text-gray-900 px-4 py-2 rounded-xl font-extrabold text-xs shadow-xs hover:bg-gray-100 transition-colors">
+              <div className="flex items-center gap-2 bg-gradient-to-r from-[#d81b60] to-[#be185d] text-white px-4 py-2 rounded-xl font-extrabold text-xs shadow-xs hover:from-[#be185d] hover:to-[#9f1239] transition-all">
                 <span>View Cart</span>
-                <ArrowRight className="w-4 h-4 text-[#6b21a8]" />
+                <ArrowRight className="w-4 h-4 text-white" />
               </div>
             </Link>
           </div>

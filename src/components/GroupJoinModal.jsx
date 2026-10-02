@@ -1,21 +1,28 @@
 import React, { useState } from 'react';
-import { Users, Sparkles, ArrowRight, ShieldCheck } from 'lucide-react';
+import { Users, Sparkles, ArrowRight, ShieldCheck, X } from 'lucide-react';
 
 const AVATAR_OPTIONS = ['👨‍🎓', '👩‍🎓', '🧑‍💻', '🦊', '🦁', '🐼', '🍕', '🚀', '⚡', '☕'];
 const QUICK_NAMES = ['Rahul', 'Priya', 'Amit', 'Sneha', 'Rohan', 'Ananya'];
 
 /**
  * Group Order Join Modal
- * Prompt shown to friends when opening a group link, letting them choose their name and avatar.
+ * Prompt shown to friends when opening a group link or entering a room code.
  */
 export default function GroupJoinModal({
   isOpen,
+  onClose,
   sessionId,
   onJoin,
 }) {
+  const [roomCode, setRoomCode] = useState(sessionId || '');
   const [name, setName] = useState('');
   const [selectedAvatar, setSelectedAvatar] = useState('👨‍🎓');
   const [error, setError] = useState('');
+
+  // Keep room code synced with prop if provided
+  React.useEffect(() => {
+    if (sessionId) setRoomCode(sessionId);
+  }, [sessionId]);
 
   if (!isOpen) return null;
 
@@ -27,18 +34,35 @@ export default function GroupJoinModal({
       return;
     }
 
-    onJoin({
+    const targetRoom = (roomCode || sessionId || '').trim().toUpperCase();
+    if (!targetRoom) {
+      setError('Please enter a room code (e.g. AIT-4921).');
+      return;
+    }
+
+    const userData = {
       id: `usr-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       name: cleanName,
       avatar: selectedAvatar,
       color: '#' + Math.floor(Math.random() * 16777215).toString(16),
-    });
+    };
+
+    onJoin(userData, targetRoom);
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-purple-200 overflow-hidden animate-in zoom-in-95 duration-200">
-        
+      <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-purple-200 overflow-hidden animate-in zoom-in-95 duration-200 relative">
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            className="absolute top-4 right-4 z-10 p-1.5 rounded-lg text-white/80 hover:text-white hover:bg-white/20 transition-colors cursor-pointer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        )}
+
         {/* Banner */}
         <div className="bg-gradient-to-r from-[#6b21a8] to-purple-800 p-6 text-white text-center relative overflow-hidden">
           <div className="absolute top-0 right-0 p-4 opacity-10">
@@ -47,14 +71,40 @@ export default function GroupJoinModal({
           <div className="w-12 h-12 rounded-2xl bg-white/20 mx-auto flex items-center justify-center text-2xl mb-3 shadow-inner">
             {selectedAvatar}
           </div>
-          <h3 className="text-xl font-black">Join Group Order</h3>
+          <h3 className="text-xl font-black">Join Group Cart</h3>
           <p className="text-xs text-purple-200 font-medium mt-1">
-            Room Code: <strong className="text-white font-mono uppercase bg-white/20 px-2 py-0.5 rounded">#{sessionId}</strong>
+            {sessionId ? (
+              <>
+                Room Code: <strong className="text-white font-mono uppercase bg-white/20 px-2 py-0.5 rounded">#{sessionId}</strong>
+              </>
+            ) : (
+              'Enter the room code shared by your friend'
+            )}
           </p>
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {/* Room Code Input (if not predetermined) */}
+          {!sessionId && (
+            <div>
+              <label className="block text-xs font-extrabold uppercase tracking-wider text-gray-700 mb-1.5">
+                Room Code (e.g. AIT-4921)
+              </label>
+              <input
+                id="input-room-code"
+                type="text"
+                required
+                value={roomCode}
+                onChange={(e) => {
+                  setRoomCode(e.target.value.toUpperCase());
+                  if (error) setError('');
+                }}
+                placeholder="AIT-XXXX"
+                className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm font-mono font-bold uppercase tracking-widest text-[#6b21a8] focus:outline-none focus:ring-2 focus:ring-[#6b21a8] focus:bg-white transition-all"
+              />
+            </div>
+          )}
           
           {/* Avatar Selector */}
           <div>

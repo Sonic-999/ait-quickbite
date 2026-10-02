@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
 import Navbar from './components/Navbar';
 import BottomNavigationBar from './components/BottomNavigationBar';
+import VoiceOrderFAB from './components/VoiceOrderFAB';
 import HomePage from './pages/HomePage';
 import CartPage from './pages/CartPage';
 import ProfilePage from './pages/ProfilePage';
@@ -16,6 +18,7 @@ import GroupInviteModal from './components/GroupInviteModal';
 import GroupJoinModal from './components/GroupJoinModal';
 import GroupSplitCheckout from './components/GroupSplitCheckout';
 import RewardsWidget from './components/RewardsWidget';
+import KitchenDisplaySystem from './components/KitchenDisplaySystem';
 import Footer from './components/Footer';
 import { CheckCircle2 } from 'lucide-react';
 import {
@@ -28,6 +31,24 @@ import {
   emitGroupDispatchOrder,
 } from './socket';
 import { fireCelebratoryConfetti } from './utils/confetti';
+
+/**
+ * PageWrapper: Wraps router views with Framer Motion page transitions
+ * (Gracefully fades in and slides up when navigated to).
+ */
+function PageWrapper({ children }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -12 }}
+      transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+      className="w-full"
+    >
+      {children}
+    </motion.div>
+  );
+}
 
 /**
  * Inner Application Component containing Router-Aware Navigation,
@@ -76,14 +97,50 @@ function AppContent() {
     };
   });
 
-  const [groupSession, setGroupSession] = useState(null);
+  const [groupSession, setGroupSession] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = sessionStorage.getItem('ait_group_session');
+        if (saved) return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return null;
+  });
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [isJoinModalOpen, setIsJoinModalOpen] = useState(false);
   const [pendingJoinSessionId, setPendingJoinSessionId] = useState(null);
   const [isGroupCheckoutOpen, setIsGroupCheckoutOpen] = useState(false);
 
-  // Cart items state
-  const [cartItems, setCartItems] = useState([]);
+  // Cart items state with localStorage persistence
+  const [cartItems, setCartItems] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('ait_quickbite_cart');
+        if (saved) return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return [];
+  });
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('ait_quickbite_cart', JSON.stringify(cartItems));
+      } catch (e) {}
+    }
+  }, [cartItems]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        if (groupSession) {
+          sessionStorage.setItem('ait_group_session', JSON.stringify(groupSession));
+        } else {
+          sessionStorage.removeItem('ait_group_session');
+        }
+      } catch (e) {}
+    }
+  }, [groupSession]);
 
   const showNotification = useCallback((msg) => {
     setNotification(msg);
@@ -95,18 +152,29 @@ function AppContent() {
   // Multiplayer Group Cart Socket.IO Listeners
   useEffect(() => {
     const handleGroupStateSync = ({ session }) => {
-      if (session) setGroupSession(session);
+      if (session) {
+        setGroupSession(session);
+        if (Array.isArray(session.cartItems)) {
+          setCartItems(session.cartItems);
+        }
+      }
     };
 
     const handleGroupUserJoined = ({ session, user }) => {
-      if (session) setGroupSession(session);
+      if (session) {
+        setGroupSession(session);
+        if (Array.isArray(session.cartItems)) setCartItems(session.cartItems);
+      }
       if (user && user.id !== currentUser.id) {
         showNotification(`${user.avatar || '👥'} ${user.name} joined the Group Cart!`);
       }
     };
 
     const handleGroupCartUpdated = ({ session, item, delta, user }) => {
-      if (session) setGroupSession(session);
+      if (session) {
+        setGroupSession(session);
+        if (Array.isArray(session.cartItems)) setCartItems(session.cartItems);
+      }
       if (user && user.id !== currentUser.id && item) {
         showNotification(
           delta > 0
@@ -117,7 +185,10 @@ function AppContent() {
     };
 
     const handleGroupPaymentReceived = ({ session, participant }) => {
-      if (session) setGroupSession(session);
+      if (session) {
+        setGroupSession(session);
+        if (Array.isArray(session.cartItems)) setCartItems(session.cartItems);
+      }
       if (participant) {
         playNotificationChime();
         showNotification(`💰 ${participant.avatar || '✓'} ${participant.name} paid their share!`);
@@ -131,6 +202,7 @@ function AppContent() {
         setOrders((prev) => [order, ...prev.filter((o) => o.id !== order.id)]);
         setActiveOrderForStatus(order);
         setIsGroupCheckoutOpen(false);
+        setCartItems([]);
         showNotification(`🎉 Group Order #${order.token} dispatched to kitchen!`);
         navigate('/live-status');
       }
@@ -200,11 +272,14 @@ function AppContent() {
     };
   }, [showNotification]);
 
-  // Handle URL query parameters (e.g., ?view=order-status or ?view=wallet)
+  // Handle URL query parameters and deep link room sessions (e.g., ?view=order-status or ?room=AIT-4921)
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const viewParam = params.get('view');
     const orderIdParam = params.get('orderId');
+    const roomParam = params.get('room') || params.get('group');
+    const matchSession = location.pathname.match(/\/cart\/session\/([^/?#]+)/i);
+    const targetRoom = (roomParam || (matchSession ? matchSession[1] : null))?.trim().toUpperCase();
 
     if (viewParam === 'order-status') {
       if (orderIdParam) {
@@ -221,10 +296,117 @@ function AppContent() {
     } else if (viewParam === 'cart') {
       navigate('/cart', { replace: true });
     }
-  }, [location.search, navigate]);
+
+    // Connect to room if room code present in URL
+    if (targetRoom) {
+      if (!groupSession || groupSession.id?.toUpperCase() !== targetRoom) {
+        setPendingJoinSessionId(targetRoom);
+        joinGroupRoom(targetRoom, currentUser);
+        fetch(`/api/group-cart/${targetRoom}`)
+          .then((r) => r.json())
+          .then((d) => {
+            if (d.success && d.session) {
+              setGroupSession(d.session);
+              if (Array.isArray(d.session.cartItems)) setCartItems(d.session.cartItems);
+            }
+          })
+          .catch(() => {});
+      }
+    }
+  }, [location.search, location.pathname, groupSession, currentUser, navigate]);
+
+  // Create Multiplayer Group Cart (Generates unique code like AIT-4921)
+  const handleCreateGroupCart = async () => {
+    try {
+      const res = await fetch('/api/group-cart/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          hostUser: currentUser,
+          shopName: cartItems[0]?.shopName || 'Juice Center',
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.session) {
+        setGroupSession(data.session);
+        joinGroupRoom(data.session.id, currentUser);
+
+        // Migrate local items to group cart
+        if (cartItems.length > 0) {
+          for (const it of cartItems) {
+            emitGroupCartUpdate(data.session.id, {
+              item: {
+                ...it,
+                addedBy: it.addedBy || { id: currentUser.id, name: currentUser.name, avatar: currentUser.avatar },
+              },
+              delta: it.quantity,
+              user: currentUser,
+            });
+          }
+        }
+
+        setIsInviteModalOpen(true);
+        showNotification(`🎉 Group Cart #${data.session.id} created! Invite friends to join.`);
+        return data.session;
+      }
+    } catch (err) {
+      console.error('[App] Failed to create group session:', err);
+      const fallbackCode = `AIT-${Math.floor(1000 + Math.random() * 9000)}`;
+      joinGroupRoom(fallbackCode, currentUser);
+      setIsInviteModalOpen(true);
+    }
+  };
+
+  // Join existing Group Cart by room code
+  const handleJoinGroupCart = async (roomCode, joinerUser) => {
+    const cleanId = (roomCode || '').trim().toUpperCase();
+    if (!cleanId) return;
+    const userToJoin = joinerUser || currentUser;
+
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('ait_group_user', JSON.stringify(userToJoin));
+      } catch (e) {}
+    }
+
+    try {
+      const res = await fetch(`/api/group-cart/${cleanId}/join`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user: userToJoin }),
+      });
+      const data = await res.json();
+      if (data.success && data.session) {
+        setGroupSession(data.session);
+        if (Array.isArray(data.session.cartItems)) setCartItems(data.session.cartItems);
+      }
+    } catch (err) {
+      console.error('[App] Error joining group session API:', err);
+    }
+
+    joinGroupRoom(cleanId, userToJoin);
+    setIsJoinModalOpen(false);
+    showNotification(`👥 Joined Group Room #${cleanId}!`);
+    navigate('/cart');
+  };
 
   // Cart operations
   const handleAddToCartFromMenu = ({ item, quantity, shop }) => {
+    const itemWithAttribution = {
+      id: item.id,
+      name: item.name,
+      price: item.price,
+      quantity,
+      shopName: shop?.name || item.shopName || 'Juice Center',
+      location: shop?.location || 'Near Sports Complex',
+      prepTimeMinutes: item.prepTimeMinutes || item.prep_time_minutes || 3,
+      addedBy: {
+        id: currentUser.id,
+        name: currentUser.name,
+        avatar: currentUser.avatar,
+      },
+    };
+
     setCartItems((prev) => {
       const existing = prev.find((it) => it.id === item.id);
       if (existing) {
@@ -232,23 +414,12 @@ function AppContent() {
           it.id === item.id ? { ...it, quantity: it.quantity + quantity } : it
         );
       }
-      return [
-        ...prev,
-        {
-          id: item.id,
-          name: item.name,
-          price: item.price,
-          quantity,
-          shopName: shop.name || 'Juice Center',
-          location: shop.location || 'Near Sports Complex',
-          prepTimeMinutes: item.prepTimeMinutes || item.prep_time_minutes || 3,
-        },
-      ];
+      return [...prev, itemWithAttribution];
     });
 
     if (groupSession) {
       emitGroupCartUpdate(groupSession.id, {
-        item,
+        item: itemWithAttribution,
         delta: quantity,
         user: currentUser,
       });
@@ -257,17 +428,45 @@ function AppContent() {
     showNotification(`Added ${quantity}x "${item.name}" to Cart!`);
   };
 
-  const handleUpdateCartQuantity = (itemId, newQty) => {
-    setCartItems((prev) => {
-      if (newQty <= 0) {
-        return prev.filter((it) => it.id !== itemId);
+  const handleUpdateCartQuantity = (itemId, newQty, itemObject = null) => {
+    if (groupSession) {
+      const targetItem =
+        itemObject ||
+        groupSession.cartItems?.find((it) => it.id === itemId) ||
+        cartItems.find((it) => it.id === itemId);
+      if (targetItem) {
+        const delta = newQty - targetItem.quantity;
+        emitGroupCartUpdate(groupSession.id, {
+          item: targetItem,
+          delta,
+          user: currentUser,
+        });
       }
-      return prev.map((it) => (it.id === itemId ? { ...it, quantity: newQty } : it));
-    });
+    } else {
+      setCartItems((prev) => {
+        if (newQty <= 0) {
+          return prev.filter((it) => it.id !== itemId);
+        }
+        return prev.map((it) => (it.id === itemId ? { ...it, quantity: newQty } : it));
+      });
+    }
   };
 
   const handleRemoveCartItem = (itemId) => {
-    setCartItems((prev) => prev.filter((it) => it.id !== itemId));
+    if (groupSession) {
+      const targetItem =
+        groupSession.cartItems?.find((it) => it.id === itemId) ||
+        cartItems.find((it) => it.id === itemId);
+      if (targetItem) {
+        emitGroupCartUpdate(groupSession.id, {
+          item: targetItem,
+          delta: -targetItem.quantity,
+          user: currentUser,
+        });
+      }
+    } else {
+      setCartItems((prev) => prev.filter((it) => it.id !== itemId));
+    }
     showNotification('Item removed from cart');
   };
 
@@ -297,7 +496,7 @@ function AppContent() {
   };
 
   // Order Placement
-  const handleConfirmOrder = async ({ items, total, pickupTime, utr, upiString, promoCode }) => {
+  const handleConfirmOrder = async ({ items, total, pickupTime, utr, upiString, promoCode, skipAutoNavigate = false }) => {
     const sanitizedUtr = (utr || '').toString().trim() || '123456789012';
 
     try {
@@ -336,10 +535,12 @@ function AppContent() {
         fireCelebratoryConfetti();
 
         setA2hsOrderToken(createdOrder.token);
-        setTimeout(() => setShowA2hsPrompt(true), 750);
 
-        navigate('/live-status');
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        if (!skipAutoNavigate) {
+          setTimeout(() => setShowA2hsPrompt(true), 750);
+          navigate('/live-status');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
 
         if (data.rewards) {
           showNotification(`Payment Verified! 🪙 +${data.rewards.earnedPoints} BiteCoins earned!`);
@@ -425,6 +626,19 @@ function AppContent() {
     } else if (tabId === 'orders') navigate('/profile');
     else if (tabId === 'wallet') navigate('/profile');
     else if (tabId === 'vendor') navigate('/vendor');
+    else if (tabId === 'admin') navigate('/admin');
+  };
+
+  // Voice-to-cart handler for VoiceOrderFAB
+  const handleVoiceOrderSuccess = (matchedItems, toastMessage) => {
+    if (!Array.isArray(matchedItems) || matchedItems.length === 0) return;
+    matchedItems.forEach(({ item, quantity }) => {
+      handleAddToCartFromMenu({
+        item,
+        quantity: quantity || 1,
+        shop: { name: item.shopName || 'Juice Center' },
+      });
+    });
   };
 
   const totalCartCount = cartItems.reduce((acc, it) => acc + it.quantity, 0);
@@ -432,163 +646,256 @@ function AppContent() {
     (o) => !o.status || !o.status.toLowerCase().includes('ready')
   ).length;
 
+  const isAdminRoute = location.pathname === '/admin' || location.pathname === '/kds';
+
   // Active tab determination for Top Navbar
   let currentActiveTab = 'home';
   if (location.pathname === '/cart') currentActiveTab = 'cart';
   else if (location.pathname === '/profile') currentActiveTab = 'wallet';
   else if (location.pathname === '/support') currentActiveTab = 'support';
   else if (location.pathname === '/vendor') currentActiveTab = 'vendor';
+  else if (location.pathname === '/admin') currentActiveTab = 'admin';
   else if (location.pathname === '/live-status') currentActiveTab = 'orders';
 
   return (
-    <div className="min-h-screen bg-[#ffffff] text-[#1f2937] flex flex-col font-sans">
+    <div className="min-h-screen bg-[#faf8f5] text-[#2a221e] flex flex-col font-sans">
       {/* Toast Alert Banner */}
       {notification && (
-        <div className="fixed top-20 right-4 sm:right-6 z-50 bg-[#ffffff] border-2 border-[#6b21a8] text-gray-900 px-4 py-3 rounded-xl shadow-xl flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-200">
-          <CheckCircle2 className="w-5 h-5 text-[#6b21a8] flex-shrink-0" />
+        <div className="fixed top-20 right-4 sm:right-6 z-50 bg-[#ffffff] border-2 border-[#164e3d] text-[#2a221e] px-4 py-3 rounded-xl shadow-xl flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-200">
+          <CheckCircle2 className="w-5 h-5 text-[#164e3d] flex-shrink-0" />
           <span className="text-xs sm:text-sm font-bold">{notification}</span>
         </div>
       )}
 
-      {/* Top Navigation Bar */}
-      <Navbar
-        activeTab={currentActiveTab}
-        onSelectTab={handleSelectTab}
-        onOpenLogin={() => setLoginModalOpen(true)}
-        onOpenCart={() => navigate('/cart')}
-        onOpenQrGenerator={() => setQrModalOpen(true)}
-        onOpenInstallPrompt={() => setShowA2hsPrompt(true)}
-        orderCount={orders.length}
-        pendingOrdersCount={pendingOrdersCount}
-        cartCount={totalCartCount}
-      />
+      {/* Top Navigation Bar (Hidden on KDS for dedicated kitchen display interface) */}
+      {!isAdminRoute && (
+        <Navbar
+          activeTab={currentActiveTab}
+          onSelectTab={handleSelectTab}
+          onOpenLogin={() => setLoginModalOpen(true)}
+          onOpenCart={() => navigate('/cart')}
+          onOpenQrGenerator={() => setQrModalOpen(true)}
+          onOpenInstallPrompt={() => setShowA2hsPrompt(true)}
+          orderCount={orders.length}
+          pendingOrdersCount={pendingOrdersCount}
+          cartCount={totalCartCount}
+        />
+      )}
 
-      {/* Main Routed Page Content */}
-      <main className="flex-1 bg-[#ffffff]">
-        <Routes>
-          {/* 1. / (Home / Menu page) */}
-          <Route
-            path="/"
-            element={
-              <HomePage
-                cartItems={cartItems}
-                onAddToCart={handleAddToCartFromMenu}
-                onUpdateQuantity={handleUpdateCartQuantity}
-                onRemoveItem={handleRemoveCartItem}
-                groupSession={groupSession}
-                currentUser={currentUser}
-                onCreateGroupCart={() => setIsInviteModalOpen(true)}
-                onLeaveGroupCart={() => setGroupSession(null)}
-                onOpenInviteModal={() => setIsInviteModalOpen(true)}
-                onUpdateGroupCart={() => {}}
-                onOpenGroupCheckout={() => setIsGroupCheckoutOpen(true)}
-                onQuickOrder={handleQuickOrder}
-              />
-            }
-          />
+      {/* Main Routed Page Content with Framer Motion Page Transitions */}
+      <main className="flex-1 bg-[#ffffff] overflow-x-hidden">
+        <AnimatePresence mode="wait" initial={false}>
+          <Routes location={location} key={location.pathname}>
+            {/* 1. / (Home / Menu page) */}
+            <Route
+              path="/"
+              element={
+                <PageWrapper>
+                  <HomePage
+                    cartItems={cartItems}
+                    onAddToCart={handleAddToCartFromMenu}
+                    onUpdateQuantity={handleUpdateCartQuantity}
+                    onRemoveItem={handleRemoveCartItem}
+                    groupSession={groupSession}
+                    currentUser={currentUser}
+                    onCreateGroupCart={handleCreateGroupCart}
+                    onLeaveGroupCart={() => {
+                      setGroupSession(null);
+                      showNotification('Left group cart');
+                    }}
+                    onOpenInviteModal={() => setIsInviteModalOpen(true)}
+                    onUpdateGroupCart={handleUpdateCartQuantity}
+                    onOpenGroupCheckout={() => setIsGroupCheckoutOpen(true)}
+                    onQuickOrder={handleQuickOrder}
+                  />
+                </PageWrapper>
+              }
+            />
 
-          {/* Alias for /menu */}
-          <Route
-            path="/menu"
-            element={
-              <HomePage
-                cartItems={cartItems}
-                onAddToCart={handleAddToCartFromMenu}
-                onUpdateQuantity={handleUpdateCartQuantity}
-                onRemoveItem={handleRemoveCartItem}
-                groupSession={groupSession}
-                currentUser={currentUser}
-                onCreateGroupCart={() => setIsInviteModalOpen(true)}
-                onLeaveGroupCart={() => setGroupSession(null)}
-                onOpenInviteModal={() => setIsInviteModalOpen(true)}
-                onUpdateGroupCart={() => {}}
-                onOpenGroupCheckout={() => setIsGroupCheckoutOpen(true)}
-                onQuickOrder={handleQuickOrder}
-              />
-            }
-          />
+            {/* Alias for /menu */}
+            <Route
+              path="/menu"
+              element={
+                <PageWrapper>
+                  <HomePage
+                    cartItems={cartItems}
+                    onAddToCart={handleAddToCartFromMenu}
+                    onUpdateQuantity={handleUpdateCartQuantity}
+                    onRemoveItem={handleRemoveCartItem}
+                    groupSession={groupSession}
+                    currentUser={currentUser}
+                    onCreateGroupCart={handleCreateGroupCart}
+                    onLeaveGroupCart={() => {
+                      setGroupSession(null);
+                      showNotification('Left group cart');
+                    }}
+                    onOpenInviteModal={() => setIsInviteModalOpen(true)}
+                    onUpdateGroupCart={handleUpdateCartQuantity}
+                    onOpenGroupCheckout={() => setIsGroupCheckoutOpen(true)}
+                    onQuickOrder={handleQuickOrder}
+                  />
+                </PageWrapper>
+              }
+            />
 
-          {/* 2. /cart (Checkout and Payment page) */}
-          <Route
-            path="/cart"
-            element={
-              <CartPage
-                cartItems={cartItems}
-                onUpdateQuantity={handleUpdateCartQuantity}
-                onRemoveItem={handleRemoveCartItem}
-                onConfirmOrder={handleConfirmOrder}
-                activePromo={activePromo}
-                onApplyPromo={(promo) => setActivePromo(promo)}
-                onRemovePromo={() => setActivePromo(null)}
-              />
-            }
-          />
+            {/* 2. /cart (Checkout and Payment page) */}
+            <Route
+              path="/cart"
+              element={
+                <PageWrapper>
+                  <CartPage
+                    cartItems={cartItems}
+                    onUpdateQuantity={handleUpdateCartQuantity}
+                    onRemoveItem={handleRemoveCartItem}
+                    onConfirmOrder={handleConfirmOrder}
+                    activePromo={activePromo}
+                    onApplyPromo={(promo) => setActivePromo(promo)}
+                    onRemovePromo={() => setActivePromo(null)}
+                    groupSession={groupSession}
+                    currentUser={currentUser}
+                    onCreateGroupCart={handleCreateGroupCart}
+                    onJoinGroupCart={handleJoinGroupCart}
+                    onLeaveGroupCart={() => {
+                      setGroupSession(null);
+                      showNotification('Left group cart');
+                    }}
+                    onOpenInviteModal={() => setIsInviteModalOpen(true)}
+                    onOpenGroupCheckout={() => setIsGroupCheckoutOpen(true)}
+                    onPayShare={(pId, utr) => emitGroupPayShare(groupSession?.id, pId, utr)}
+                    onDispatchGroupOrder={(details) => emitGroupDispatchOrder(groupSession?.id, details)}
+                  />
+                </PageWrapper>
+              }
+            />
 
-          {/* 3. /profile (User Wallet, Macros, and Order History) */}
-          <Route
-            path="/profile"
-            element={
-              <ProfilePage
-                currentUser={currentUser}
-                orders={orders}
-                onTrackOrder={(order) => {
-                  setActiveOrderForStatus(order);
-                  navigate('/live-status');
-                }}
-                onBrowseShops={() => navigate('/')}
-                onAddToCart={handleAddToCartFromMenu}
-              />
-            }
-          />
+            {/* Direct deep link to shared session: /cart/session/:sessionId */}
+            <Route
+              path="/cart/session/:sessionId"
+              element={
+                <PageWrapper>
+                  <CartPage
+                    cartItems={cartItems}
+                    onUpdateQuantity={handleUpdateCartQuantity}
+                    onRemoveItem={handleRemoveCartItem}
+                    onConfirmOrder={handleConfirmOrder}
+                    activePromo={activePromo}
+                    onApplyPromo={(promo) => setActivePromo(promo)}
+                    onRemovePromo={() => setActivePromo(null)}
+                    groupSession={groupSession}
+                    currentUser={currentUser}
+                    onCreateGroupCart={handleCreateGroupCart}
+                    onJoinGroupCart={handleJoinGroupCart}
+                    onLeaveGroupCart={() => {
+                      setGroupSession(null);
+                      showNotification('Left group cart');
+                    }}
+                    onOpenInviteModal={() => setIsInviteModalOpen(true)}
+                    onOpenGroupCheckout={() => setIsGroupCheckoutOpen(true)}
+                    onPayShare={(pId, utr) => emitGroupPayShare(groupSession?.id, pId, utr)}
+                    onDispatchGroupOrder={(details) => emitGroupDispatchOrder(groupSession?.id, details)}
+                  />
+                </PageWrapper>
+              }
+            />
 
-          {/* Alias: /wallet redirects to /profile */}
-          <Route path="/wallet" element={<Navigate to="/profile" replace />} />
+            {/* 3. /profile (User Wallet, Macros, and Order History) */}
+            <Route
+              path="/profile"
+              element={
+                <PageWrapper>
+                  <ProfilePage
+                    currentUser={currentUser}
+                    orders={orders}
+                    onTrackOrder={(order) => {
+                      setActiveOrderForStatus(order);
+                      navigate('/live-status');
+                    }}
+                    onBrowseShops={() => navigate('/')}
+                    onAddToCart={handleAddToCartFromMenu}
+                  />
+                </PageWrapper>
+              }
+            />
 
-          {/* 4. /support (Customer Support / Help page) */}
-          <Route
-            path="/support"
-            element={<SupportPage showNotification={showNotification} />}
-          />
+            {/* Alias: /wallet redirects to /profile */}
+            <Route path="/wallet" element={<Navigate to="/profile" replace />} />
 
-          {/* Additional core routes */}
-          <Route
-            path="/vendor"
-            element={
-              <div className="pb-24">
-                <VendorDashboard
-                  orders={orders}
-                  onUpdateOrderStatus={handleUpdateOrderStatus}
-                  onAddNewSampleOrder={handleAddNewSampleOrder}
-                  onSwitchToStudentView={() => navigate('/')}
-                />
-              </div>
-            }
-          />
+            {/* 4. /support (Customer Support / Help page) */}
+            <Route
+              path="/support"
+              element={
+                <PageWrapper>
+                  <SupportPage showNotification={showNotification} />
+                </PageWrapper>
+              }
+            />
 
-          <Route
-            path="/live-status"
-            element={
-              <div className="pb-24">
-                <LiveOrderStatus
-                  order={activeOrderForStatus || orders[0]}
-                  onBackHome={() => navigate('/')}
-                  onViewAllOrders={() => navigate('/profile')}
-                  onOpenQrGenerator={() => setQrModalOpen(true)}
-                />
-              </div>
-            }
-          />
+            {/* Additional core routes */}
+            <Route
+              path="/vendor"
+              element={
+                <PageWrapper>
+                  <div className="pb-24">
+                    <VendorDashboard
+                      orders={orders}
+                      onUpdateOrderStatus={handleUpdateOrderStatus}
+                      onAddNewSampleOrder={handleAddNewSampleOrder}
+                      onSwitchToStudentView={() => navigate('/')}
+                    />
+                  </div>
+                </PageWrapper>
+              }
+            />
 
-          {/* Catch-all route -> redirect to / */}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+            <Route
+              path="/live-status"
+              element={
+                <PageWrapper>
+                  <div className="pb-24">
+                    <LiveOrderStatus
+                      order={activeOrderForStatus || orders[0]}
+                      onBackHome={() => navigate('/')}
+                      onViewAllOrders={() => navigate('/profile')}
+                      onOpenQrGenerator={() => setQrModalOpen(true)}
+                    />
+                  </div>
+                </PageWrapper>
+              }
+            />
+
+            {/* Secure Kitchen Display System (KDS) Route */}
+            <Route
+              path="/admin"
+              element={
+                <PageWrapper>
+                  <KitchenDisplaySystem
+                    initialOrders={orders}
+                    onSwitchToStudentView={() => navigate('/')}
+                  />
+                </PageWrapper>
+              }
+            />
+            <Route path="/kds" element={<Navigate to="/admin" replace />} />
+
+            {/* Catch-all route -> redirect to / */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </AnimatePresence>
       </main>
 
-      {/* Light-Themed Footer */}
-      <Footer onSelectTab={handleSelectTab} />
+      {/* Light-Themed Footer (Hidden on KDS) */}
+      {!isAdminRoute && <Footer onSelectTab={handleSelectTab} />}
 
-      {/* Sticky Bottom Navigation Bar with 4 Highly Visible Icons */}
-      <BottomNavigationBar cartCount={totalCartCount} />
+      {/* Global Floating Action Button (FAB) for Voice-to-Cart (Hidden on KDS) */}
+      {!isAdminRoute && (
+        <VoiceOrderFAB
+          onVoiceOrderSuccess={handleVoiceOrderSuccess}
+          showNotification={showNotification}
+        />
+      )}
+
+      {/* Sticky Bottom Navigation Bar with 4 Highly Visible Icons (Hidden on KDS) */}
+      {!isAdminRoute && <BottomNavigationBar cartCount={totalCartCount} />}
 
       {/* Slide-Out Checkout Panel (Optional quick drawer) */}
       <CartCheckoutPanel
@@ -604,15 +911,17 @@ function AppContent() {
         onAddPromoItemToCart={handleAddFreePromoItemToCart}
       />
 
-      {/* Gamified Loyalty Rewards Widget */}
-      <RewardsWidget
-        userId="usr-std-01"
-        activePromo={activePromo}
-        onApplyPromo={(promo) => setActivePromo(promo)}
-        onOpenCart={() => navigate('/cart')}
-        onAddToCart={handleAddFreePromoItemToCart}
-        refreshTrigger={rewardsRefreshKey}
-      />
+      {/* Gamified Loyalty Rewards Widget (Hidden on KDS) */}
+      {!isAdminRoute && (
+        <RewardsWidget
+          userId="usr-std-01"
+          activePromo={activePromo}
+          onApplyPromo={(promo) => setActivePromo(promo)}
+          onOpenCart={() => navigate('/cart')}
+          onAddToCart={handleAddFreePromoItemToCart}
+          refreshTrigger={rewardsRefreshKey}
+        />
+      )}
 
       {/* Login Modal */}
       <LoginModal
@@ -642,6 +951,7 @@ function AppContent() {
         isOpen={isInviteModalOpen}
         onClose={() => setIsInviteModalOpen(false)}
         session={groupSession}
+        sessionId={groupSession?.id}
         currentUser={currentUser}
       />
 
@@ -649,11 +959,27 @@ function AppContent() {
         isOpen={isJoinModalOpen}
         onClose={() => setIsJoinModalOpen(false)}
         sessionId={pendingJoinSessionId || groupSession?.id}
-        onJoin={(name, avatar) => {
-          showNotification(`Welcome to Group Cart, ${name}!`);
-          setIsJoinModalOpen(false);
+        onJoin={(user, code) => {
+          handleJoinGroupCart(code || pendingJoinSessionId || groupSession?.id, user);
         }}
       />
+
+      {/* Group Split Checkout Modal */}
+      {groupSession && (
+        <GroupSplitCheckout
+          isOpen={isGroupCheckoutOpen}
+          onClose={() => setIsGroupCheckoutOpen(false)}
+          session={groupSession}
+          currentUser={currentUser}
+          onPayShare={(pId, utr) => emitGroupPayShare(groupSession?.id, pId, utr)}
+          onDispatchOrder={(details) => emitGroupDispatchOrder(groupSession?.id, details)}
+          onBackToCart={() => setIsGroupCheckoutOpen(false)}
+          onBackToMenu={() => {
+            setIsGroupCheckoutOpen(false);
+            navigate('/');
+          }}
+        />
+      )}
     </div>
   );
 }

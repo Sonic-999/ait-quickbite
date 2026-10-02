@@ -14,6 +14,7 @@ export default function GroupInviteModal({
   participants = [],
 }) {
   const [copied, setCopied] = useState(false);
+  const [codeCopied, setCodeCopied] = useState(false);
   const qrRef = useRef(null);
 
   const activeSessionId = sessionId || session?.id;
@@ -21,7 +22,7 @@ export default function GroupInviteModal({
 
   // Build clean shareable room link
   const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173';
-  const shareUrl = activeSessionId ? `${origin}/cart/session/${activeSessionId}` : '';
+  const shareUrl = activeSessionId ? `${origin}/cart?room=${activeSessionId}` : '';
 
   // Render QR Code using window.QRCode (called unconditionally to satisfy React rules of hooks)
   useEffect(() => {
@@ -58,12 +59,25 @@ export default function GroupInviteModal({
     }
   };
 
+  const handleCopyCode = async () => {
+    try {
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(activeSessionId);
+      }
+      setCodeCopied(true);
+      setTimeout(() => setCodeCopied(false), 2500);
+    } catch (_) {
+      setCodeCopied(true);
+      setTimeout(() => setCodeCopied(false), 2500);
+    }
+  };
+
   const handleNativeShare = async () => {
     if (navigator.share) {
       try {
         await navigator.share({
           title: 'Join my AIT QuickBite Group Order!',
-          text: `Hey! I started a group cart on AIT QuickBite. Tap this link to add your food to our shared order:`,
+          text: `Hey! I started a group cart on AIT QuickBite. Use room code ${activeSessionId} or tap this link to join:`,
           url: shareUrl,
         });
       } catch (_) {}
@@ -84,7 +98,7 @@ export default function GroupInviteModal({
             </div>
             <div>
               <h3 className="text-base font-extrabold leading-snug">Invite Friends to Cart</h3>
-              <p className="text-xs text-purple-200 font-medium">Room ID: #{sessionId}</p>
+              <p className="text-xs text-purple-200 font-medium font-mono">Room Code: {activeSessionId}</p>
             </div>
           </div>
           <button
@@ -96,12 +110,46 @@ export default function GroupInviteModal({
         </div>
 
         {/* Content */}
-        <div className="p-5 sm:p-6 space-y-5">
+        <div className="p-5 sm:p-6 space-y-4">
           
+          {/* Room Code Badge with 1-Click Copy */}
+          <div className="bg-purple-50/80 border border-purple-200 rounded-xl p-3.5 flex items-center justify-between shadow-2xs">
+            <div>
+              <span className="text-[10px] font-black uppercase tracking-wider text-purple-700 block">
+                Unique Room Code
+              </span>
+              <span id="display-room-code" className="text-xl font-black font-mono tracking-wider text-[#6b21a8]">
+                {activeSessionId}
+              </span>
+            </div>
+            <button
+              id="btn-copy-room-code"
+              type="button"
+              onClick={handleCopyCode}
+              className={`py-1.5 px-3 rounded-lg text-xs font-extrabold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer ${
+                codeCopied
+                  ? 'bg-emerald-600 text-white'
+                  : 'bg-[#6b21a8] hover:bg-[#581c87] text-white active:scale-95'
+              }`}
+            >
+              {codeCopied ? (
+                <>
+                  <Check className="w-3.5 h-3.5 stroke-[3]" />
+                  <span>Copied!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>Copy Code</span>
+                </>
+              )}
+            </button>
+          </div>
+
           {/* Shareable Link Input with One-Click Copy */}
           <div>
             <label className="block text-xs font-extrabold uppercase tracking-wider text-gray-700 mb-1.5">
-              Shareable Room Link
+              Shareable Direct Link
             </label>
             <div className="flex items-center gap-2">
               <input
@@ -128,7 +176,7 @@ export default function GroupInviteModal({
                 ) : (
                   <>
                     <Copy className="w-4 h-4" />
-                    <span>Copy</span>
+                    <span>Copy Link</span>
                   </>
                 )}
               </button>
